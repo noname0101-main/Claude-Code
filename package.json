@@ -8,7 +8,7 @@
     "hygge": "cli.js"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/hygge.test.js",
     "start": "node cli.js"
   },
   "engines": {

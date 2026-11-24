@@ -2,6 +2,8 @@
 
 Et lille programmeringssprog på dansk. Det har en editor, der kører i browseren, og en skildpadde, der kan tegne.
 
+> Repoet indeholder også **[Opslag](opslag/)**, en AI, der finder ting og slår ting op for folk. Den søger på nettet og viser sine kilder, og den kan bruge Hygge til at regne.
+
 ```
 sæt navn = "Freja"
 sæt alder = 13

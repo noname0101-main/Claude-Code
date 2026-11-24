@@ -1,2 +1,6 @@
 node_modules/
 .DS_Store
+
+# Opslag: personlige filer
+opslag/indstillinger.json
+opslag/noter.json

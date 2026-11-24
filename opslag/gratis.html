@@ -1,0 +1,297 @@
+<title>Opslag</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  Den gratis version af Opslag. Den kører kun som en side på claude.ai, hvor den
+  spørger Claude direkte (uden API-nøgle). Den kan ikke søge på nettet.
+  Filen udgives sammen med ui.js og stil.css (fra public/) og hygge.js.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="stil.css">
+
+<header class="top">
+  <div class="column top-inner">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 40 40"><rect x="1" y="1" width="38" height="38" rx="11" fill="currentColor"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="var(--accent-ink)" stroke-width="3"/><path d="M23.5 23.5 30 30" stroke="var(--accent-ink)" stroke-width="3.4" stroke-linecap="round"/><path d="M14.5 18h7" stroke="var(--marker)" stroke-width="3" stroke-linecap="round"/></svg>
+    </div>
+    <div class="brand">
+      <h1>Opslag</h1>
+      <p>Gratis version. Svarer ud fra Claudes viden, regner og husker ting for dig.</p>
+    </div>
+    <button class="tool-btn" id="noter-knap" type="button" aria-expanded="false" aria-controls="noter">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 2.5h8v11l-4-2.5-4 2.5z"/></svg><span class="label">Noter</span>
+    </button>
+    <button class="tool-btn" id="ny" type="button">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg><span class="label">Ny samtale</span>
+    </button>
+  </div>
+</header>
+
+<section class="notes" id="noter" hidden aria-labelledby="noter-titel">
+  <div class="column notes-inner">
+    <h2 id="noter-titel">Det, du har bedt Opslag huske</h2>
+    <div id="noter-liste"></div>
+  </div>
+</section>
+
+<main class="column chat" id="chat" aria-live="polite"></main>
+
+<div class="composer-band">
+  <form class="column" id="form">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="Spørg om hvad som helst …" aria-label="Dit spørgsmål"></textarea>
+      <button class="send" id="send" type="submit">Send</button>
+    </div>
+  </form>
+</div>
+
+<script src="hygge.js"></script>
+<script src="ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const TIDSZONE = 'Europe/Copenhagen';
+  const claude = window.claude;
+  const brug = (navn) => (claude && typeof claude.use === 'function' ? claude.use(navn) : Promise.resolve(null));
+  const sampleKlar = brug('sample');
+  const dbKlar = brug('db');
+  const userKlar = brug('user');
+
+  const INSTRUKS = `Du er Opslag, en hjælpsom assistent, der finder ting og slår ting op for folk. Du kører i en gratis version, der IKKE kan søge på nettet.
+
+Sådan arbejder du:
+- Svar på dansk, medmindre personen skriver på et andet sprog.
+- Svar ud fra din egen viden. Handler spørgsmålet om noget, der kan have ændret sig (priser, åbningstider, nyheder, vejr, regler), så sig det tydeligt og fortæl, hvor man kan tjekke det, fx borger.dk, dmi.dk eller butikkens egen side.
+- Hold svarene korte og praktiske. Brug punktlister, når du sammenligner ting.
+- Brug dato_og_tid, når svaret afhænger af dags dato. Gæt ikke.
+- Brug regn til udregninger, omregn til enheder og dage_mellem til datoer, så tallene er helt præcise.
+- Når personen beder dig huske noget, så brug gem_note. Når de spørger efter noget, de har bedt dig huske, så brug find_noter. Brug slet_note, når de beder dig glemme noget.
+- Beder personen dig køre et lille program, kan du skrive det i Hygge (et dansk programmeringssprog) og køre det med koer_hygge.
+- Ved spørgsmål om helbred, jura eller penge giver du almindelig information og anbefaler at spørge en fagperson, når det er vigtigt.`;
+
+  // ── Værktøjer, der kører her på siden ──────────────────────────────
+
+  let aktivitet = () => {};
+
+  function datoOgTid() {
+    return new Intl.DateTimeFormat('da-DK', {
+      timeZone: TIDSZONE, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(new Date()) + ` (tidszone ${TIDSZONE})`;
+  }
+
+  function koerHygge(kode) {
+    const r = window.Hygge.run(String(kode), { maxSteps: 200000 });
+    const linjer = r.output.filter((o) => o.type === 'tekst').map((o) => o.text);
+    if (r.waitingFor) throw new Error('Programmet bruger spørg(), og det kan ikke bruges her.');
+    if (r.error) throw new Error(`Fejl${r.error.line ? ` på linje ${r.error.line}` : ''}: ${r.error.message}`);
+    return linjer.join('\n').slice(0, 4000) || '(programmet skrev ingenting)';
+  }
+
+  // Enheder og hvor meget de er værd i grundenheden
+  const ENHEDER = {
+    længde: { mm: 0.001, cm: 0.01, dm: 0.1, m: 1, km: 1000, tomme: 0.0254, inch: 0.0254, fod: 0.3048, ft: 0.3048, yard: 0.9144, mil: 10000, mile: 1609.344, sømil: 1852 },
+    vægt: { mg: 0.000001, g: 0.001, kg: 1, ton: 1000, pund: 0.45359237, lb: 0.45359237, ounce: 0.028349523125, oz: 0.028349523125 },
+    rumfang: { ml: 0.001, cl: 0.01, dl: 0.1, l: 1, liter: 1, tsk: 0.005, spsk: 0.015, kop: 0.25, gallon: 3.785411784, pint: 0.473176473, m3: 1000 },
+    fart: { 'm/s': 1, 'km/t': 1 / 3.6, 'km/h': 1 / 3.6, mph: 0.44704, knob: 0.514444 },
+    tid: { sekund: 1, s: 1, minut: 60, min: 60, time: 3600, t: 3600, døgn: 86400, dag: 86400, uge: 604800, år: 31557600 },
+    data: { b: 1, kb: 1000, mb: 1e6, gb: 1e9, tb: 1e12, kib: 1024, mib: 1048576, gib: 1073741824 },
+    areal: { m2: 1, km2: 1e6, ha: 10000, hektar: 10000, tdl: 5516, 'kvadratfod': 0.09290304 },
+  };
+  const TEMPERATUR = { c: 'C', celsius: 'C', '°c': 'C', f: 'F', fahrenheit: 'F', '°f': 'F', k: 'K', kelvin: 'K' };
+
+  function omregn(vaerdi, fra, til) {
+    const v = Number(String(vaerdi).replace(',', '.'));
+    if (!Number.isFinite(v)) throw new Error(`"${vaerdi}" er ikke et tal.`);
+    const a = String(fra).trim().toLowerCase();
+    const b = String(til).trim().toLowerCase();
+    if (TEMPERATUR[a] && TEMPERATUR[b]) {
+      const tilC = { C: (x) => x, F: (x) => (x - 32) * 5 / 9, K: (x) => x - 273.15 }[TEMPERATUR[a]](v);
+      const ud = { C: (x) => x, F: (x) => x * 9 / 5 + 32, K: (x) => x + 273.15 }[TEMPERATUR[b]](tilC);
+      return `${v} ${fra} = ${Number(ud.toPrecision(10))} ${til}`;
+    }
+    for (const [slags, tabel] of Object.entries(ENHEDER)) {
+      if (a in tabel && b in tabel) return `${v} ${fra} = ${Number((v * tabel[a] / tabel[b]).toPrecision(10))} ${til} (${slags})`;
+    }
+    throw new Error(`Jeg kan ikke omregne fra "${fra}" til "${til}". Brug fx m, km, kg, pund, l, dl, km/t, °C eller GB.`);
+  }
+
+  function dagenesDato(tekst) {
+    if (!tekst) {
+      const [aar, md, dag] = new Intl.DateTimeFormat('en-CA', { timeZone: TIDSZONE }).format(new Date()).split('-').map(Number);
+      return Date.UTC(aar, md - 1, dag);
+    }
+    const m = String(tekst).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m) throw new Error(`Skriv datoen som ÅÅÅÅ-MM-DD, ikke "${tekst}".`);
+    return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+
+  function dageMellem(fra, til) {
+    const dage = Math.round((dagenesDato(til) - dagenesDato(fra)) / 86400000);
+    return `${dage} dage (${Math.floor(Math.abs(dage) / 7)} uger og ${Math.abs(dage) % 7} dage)`;
+  }
+
+  // Noter gemmes privat for hver person i sidens database
+  async function noteSamling() {
+    const [db, user] = await Promise.all([dbKlar, userKlar]);
+    const id = db && user ? await user.id() : null;
+    if (!db || !id) throw new Error('Noter virker kun, når du er logget ind på claude.ai.');
+    return db.collection(`data/users/${id}`);
+  }
+
+  async function alleNoter() {
+    const samling = await noteSamling();
+    const snap = await samling.get();
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((n) => n.slags === 'note')
+      .sort((x, y) => String(x.gemt).localeCompare(String(y.gemt)));
+  }
+
+  const VAERKTOEJER = [
+    {
+      name: 'dato_og_tid',
+      description: 'Giver dags dato, ugedag og klokken i Danmark lige nu.',
+      execute: () => { aktivitet('tid', 'Tjekker dato og klokkeslæt'); return datoOgTid(); },
+    },
+    {
+      name: 'regn',
+      description: 'Regner et udtryk præcist ud og giver resultatet. Brug + - * / % (rest) og ^ (potens), parenteser og funktionerne kvadratrod(x), afrund(x, decimaler), absolut(x). Decimaltal skrives med punktum.',
+      inputSchema: { type: 'object', properties: { udtryk: { type: 'string', description: 'Fx "(1299 * 0.8) + 49"' } }, required: ['udtryk'] },
+      execute: ({ udtryk }) => { aktivitet('regn', `Regner: ${udtryk}`); return koerHygge(`skriv ${udtryk}`); },
+    },
+    {
+      name: 'omregn',
+      description: 'Omregner mellem enheder for længde, vægt, rumfang, fart, tid, data, areal og temperatur, fx 5 mile til km eller 350 F til C.',
+      inputSchema: {
+        type: 'object',
+        properties: { vaerdi: { type: 'number' }, fra: { type: 'string', description: 'Fx "mile", "kg", "F", "km/t"' }, til: { type: 'string' } },
+        required: ['vaerdi', 'fra', 'til'],
+      },
+      execute: ({ vaerdi, fra, til }) => { aktivitet('regn', `Omregner ${vaerdi} ${fra} til ${til}`); return omregn(vaerdi, fra, til); },
+    },
+    {
+      name: 'dage_mellem',
+      description: 'Tæller dage mellem to datoer (ÅÅÅÅ-MM-DD). Udelad fra for at tælle fra i dag, fx dage til jul.',
+      inputSchema: { type: 'object', properties: { fra: { type: 'string' }, til: { type: 'string' } }, required: ['til'] },
+      execute: ({ fra, til }) => { aktivitet('tid', `Tæller dage til ${til}`); return dageMellem(fra, til); },
+    },
+    {
+      name: 'gem_note',
+      description: 'Gemmer en note, som personen har bedt dig huske, fx hvor de har lagt noget. Giver notens id tilbage.',
+      inputSchema: { type: 'object', properties: { tekst: { type: 'string' }, emne: { type: 'string' } }, required: ['tekst'] },
+      execute: async ({ tekst, emne }) => {
+        const t = String(tekst || '').trim();
+        if (!t) throw new Error('Noten er tom.');
+        aktivitet('note', `Husker: ${t}`);
+        const samling = await noteSamling();
+        const ref = await samling.add({ slags: 'note', tekst: t.slice(0, 2000), emne: String(emne || '').slice(0, 100), gemt: new Date().toISOString() });
+        return `Gemt med id ${ref.id}`;
+      },
+    },
+    {
+      name: 'find_noter',
+      description: 'Søger i de noter, personen har bedt dig huske. Et tomt søgeord giver alle noter med deres id.',
+      inputSchema: { type: 'object', properties: { ord: { type: 'string' } }, required: ['ord'] },
+      execute: async ({ ord }) => {
+        const soeg = String(ord || '').trim().toLocaleLowerCase('da');
+        aktivitet('note', soeg ? `Leder i dine noter efter "${soeg}"` : 'Kigger i dine noter');
+        const dele = soeg.split(/\s+/).filter(Boolean);
+        const fundne = (await alleNoter()).filter((n) => !dele.length || dele.some((d) => `${n.tekst} ${n.emne}`.toLocaleLowerCase('da').includes(d)));
+        return fundne.length ? fundne.map((n) => `${n.id}: ${n.tekst}${n.emne ? ` [${n.emne}]` : ''}`).join('\n') : 'Ingen noter fundet.';
+      },
+    },
+    {
+      name: 'slet_note',
+      description: 'Sletter en note ud fra dens id. Find id\'et med find_noter først.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      execute: async ({ id }) => {
+        aktivitet('note', 'Sletter en note');
+        const samling = await noteSamling();
+        const ref = samling.doc(String(id));
+        if (!(await ref.get()).exists) throw new Error(`Der findes ingen note med id "${id}".`);
+        await ref.delete();
+        return `Note ${id} er slettet.`;
+      },
+    },
+    {
+      name: 'koer_hygge',
+      description: 'Kører et lille program skrevet i Hygge, et dansk programmeringssprog med fx skriv, sæt x = 1, hvis/ellers, gentag 3 gange { }, for i fra 1 til 10 { } og funktion navn(a) { returner a }. Giver det, programmet skriver.',
+      inputSchema: { type: 'object', properties: { kode: { type: 'string' } }, required: ['kode'] },
+      execute: ({ kode }) => { aktivitet('regn', 'Kører et Hygge-program'); return koerHygge(kode); },
+    },
+  ];
+
+  const FEJL = {
+    not_granted: 'Siden har ikke fået lov til at bruge Claude. Genindlæs siden, og tryk Tillad, når du bliver spurgt.',
+    rate_limited: 'Du har brugt din grænse for nu. Prøv igen lidt senere.',
+    prompt_too_large: 'Samtalen er blevet for lang. Start en ny samtale.',
+    refused: 'Claude ville ikke svare på det spørgsmål.',
+    sampling_disabled: 'Din organisation har slået denne funktion fra.',
+    capability_disabled: 'Din organisation har slået denne funktion fra.',
+    session_expired: 'Du er blevet logget ud. Genindlæs siden.',
+  };
+
+  // ── Backend til chatvinduet ────────────────────────────────────────
+
+  let historik = [];
+  let styring = null;
+  let tur = 0;
+
+  const backend = {
+    async send(tekst, paaHaendelse) {
+      const sample = await sampleKlar;
+      if (!sample) throw new Error('Den gratis version virker kun, når siden er åbnet på claude.ai.');
+      const id = `svar${++tur}`;
+      historik.push({ role: 'user', content: tekst });
+      const beskeder = historik.map((b, i) => (i === 0 ? { role: 'user', content: `${INSTRUKS}\n\n---\n\n${b.content}` } : b));
+      aktivitet = (slags, t) => paaHaendelse({ type: 'aktivitet', slags, tekst: t });
+      styring = new AbortController();
+      const valg = {
+        cache: false,
+        signal: styring.signal,
+        onText: ({ text }) => paaHaendelse({ type: 'tekst', id, tekst: text }),
+      };
+      try {
+        let svar;
+        try {
+          svar = await sample(beskeder, { ...valg, tools: VAERKTOEJER });
+        } catch (e) {
+          if (e && e.code === 'tools_unavailable') svar = await sample(beskeder, valg);
+          else throw e;
+        }
+        paaHaendelse({ type: 'tekst', id, tekst: svar.text });
+        historik.push({ role: 'assistant', content: svar.text });
+        if (svar.truncated) paaHaendelse({ type: 'advarsel', tekst: 'Svaret blev afbrudt, fordi det var for langt. Spørg om en mindre del ad gangen.' });
+      } catch (e) {
+        historik.pop(); // spørgsmålet blev ikke besvaret, så det kommer ikke med i samtalen
+        if (e && e.code === 'cancelled') {
+          paaHaendelse({ type: 'advarsel', tekst: 'Stoppet.' });
+          return;
+        }
+        throw new Error(FEJL[e && e.code] || (e && e.message) || 'Der skete en fejl.');
+      } finally {
+        styring = null;
+        aktivitet = () => {};
+      }
+    },
+    godkend() {},
+    stop() { if (styring) styring.abort(); },
+    ny() { historik = []; },
+    noter: alleNoter,
+  };
+
+  window.Opslag.start({
+    backend,
+    tilstand: 'Denne gratis version kan ikke søge på nettet. Den svarer ud fra Claudes viden og siger til, når noget bør tjekkes.',
+    eksempler: [
+      'Hvor mange dage er der til juleaften?',
+      'Hvad er 350 °F i °C?',
+      'Husk at reservenøglen ligger under urtepotten',
+      'Hvor lagde jeg reservenøglen?',
+      'Forklar fotosyntese, så en 10-årig forstår det',
+    ],
+  });
+})();
+</script>

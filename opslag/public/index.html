@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Opslag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="stil.css">
+</head>
+<body>
+<header class="top">
+  <div class="column top-inner">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 40 40"><rect x="1" y="1" width="38" height="38" rx="11" fill="currentColor"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="var(--accent-ink)" stroke-width="3"/><path d="M23.5 23.5 30 30" stroke="var(--accent-ink)" stroke-width="3.4" stroke-linecap="round"/><path d="M14.5 18h7" stroke="var(--marker)" stroke-width="3" stroke-linecap="round"/></svg>
+    </div>
+    <div class="brand">
+      <h1>Opslag</h1>
+      <p>Søger på nettet og viser, hvor svaret kommer fra.</p>
+    </div>
+    <button class="tool-btn" id="noter-knap" type="button" aria-expanded="false" aria-controls="noter">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 2.5h8v11l-4-2.5-4 2.5z"/></svg><span class="label">Noter</span>
+    </button>
+    <button class="tool-btn" id="ny" type="button">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg><span class="label">Ny samtale</span>
+    </button>
+  </div>
+</header>
+
+<section class="notes" id="noter" hidden aria-labelledby="noter-titel">
+  <div class="column notes-inner">
+    <h2 id="noter-titel">Det, du har bedt Opslag huske</h2>
+    <div id="noter-liste"></div>
+  </div>
+</section>
+
+<main class="column chat" id="chat" aria-live="polite"></main>
+
+<div class="composer-band">
+  <form class="column" id="form">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="Spørg om hvad som helst …" aria-label="Dit spørgsmål"></textarea>
+      <button class="send" id="send" type="submit">Send</button>
+    </div>
+  </form>
+</div>
+
+<script src="ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  async function post(url, data) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const svar = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(svar.fejl || `Serveren svarede ${res.status}`);
+    return svar;
+  }
+
+  // Taler med server.js, som taler med Anthropic
+  const backend = {
+    samtale: null,
+
+    async send(tekst, paaHaendelse) {
+      if (!this.samtale) this.samtale = (await post('/api/samtale', {})).id;
+      const res = await fetch('/api/besked', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ samtale: this.samtale, tekst }),
+      });
+      if (!res.ok) {
+        const svar = await res.json().catch(() => ({}));
+        throw new Error(svar.fejl || `Serveren svarede ${res.status}`);
+      }
+      // Svaret er JSON-linjer, der kommer én ad gangen
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let slut;
+        while ((slut = buffer.indexOf('\n')) >= 0) {
+          const linje = buffer.slice(0, slut).trim();
+          buffer = buffer.slice(slut + 1);
+          if (!linje) continue;
+          const haendelse = JSON.parse(linje);
+          if (haendelse.type === 'slut' && haendelse.afsluttet) this.samtale = null;
+          paaHaendelse(haendelse);
+        }
+      }
+    },
+
+    godkend(id, ja) {
+      return post('/api/godkend', { samtale: this.samtale, id, svar: ja ? 'tillad' : 'afvis' });
+    },
+
+    stop() {
+      if (this.samtale) post('/api/stop', { samtale: this.samtale }).catch(() => {});
+    },
+
+    ny() {
+      this.samtale = null;
+    },
+
+    async noter() {
+      const res = await fetch('/api/noter');
+      if (!res.ok) throw new Error(`Serveren svarede ${res.status}`);
+      return (await res.json()).noter;
+    },
+  };
+
+  window.Opslag.start({
+    backend,
+    eksempler: [
+      'Hvornår har Rundetårn åbent i dag?',
+      'Hvad koster et Ungdomskort i 2027?',
+      'Find en god cykelhjelm til under 400 kr.',
+      'Husk at reservenøglen ligger under urtepotten',
+      'Hvad betyder ordet "hygge" på engelsk?',
+    ],
+  });
+})();
+</script>
+</body>
+</html>
