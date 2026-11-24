@@ -58,17 +58,22 @@
     return svar;
   }
 
-  // Taler med server.js, som taler med Anthropic
+  // Taler med server.js, som taler med OpenRouter
   const backend = {
     samtale: null,
 
-    async send(tekst, paaHaendelse) {
+    async send(tekst, paaHaendelse, forsoeg = 1) {
       if (!this.samtale) this.samtale = (await post('/api/samtale', {})).id;
       const res = await fetch('/api/besked', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ samtale: this.samtale, tekst }),
       });
+      if (res.status === 404 && forsoeg === 1) {
+        // Serveren er blevet genstartet og har glemt samtalen. Start en ny.
+        this.samtale = null;
+        return this.send(tekst, paaHaendelse, 2);
+      }
       if (!res.ok) {
         const svar = await res.json().catch(() => ({}));
         throw new Error(svar.fejl || `Serveren svarede ${res.status}`);
@@ -85,17 +90,13 @@
         while ((slut = buffer.indexOf('\n')) >= 0) {
           const linje = buffer.slice(0, slut).trim();
           buffer = buffer.slice(slut + 1);
-          if (!linje) continue;
-          const haendelse = JSON.parse(linje);
-          if (haendelse.type === 'slut' && haendelse.afsluttet) this.samtale = null;
-          paaHaendelse(haendelse);
+          if (linje) paaHaendelse(JSON.parse(linje));
         }
       }
+      return undefined;
     },
 
-    godkend(id, ja) {
-      return post('/api/godkend', { samtale: this.samtale, id, svar: ja ? 'tillad' : 'afvis' });
-    },
+    godkend() {}, // OpenRouter-versionen beder aldrig om lov til noget
 
     stop() {
       if (this.samtale) post('/api/stop', { samtale: this.samtale }).catch(() => {});

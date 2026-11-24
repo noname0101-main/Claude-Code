@@ -1,16 +1,13 @@
 {
   "name": "opslag",
-  "version": "1.0.0",
-  "description": "Opslag – en AI, der finder ting og slår ting op for folk",
+  "version": "2.0.0",
+  "description": "Opslag – en AI, der finder ting og slår ting op for folk (via OpenRouter)",
   "private": true,
   "main": "server.js",
   "scripts": {
     "opsaet": "node opsaet.js",
     "start": "node server.js",
     "test": "node --test"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^1.13.0"
   },
   "engines": {
     "node": ">=18"

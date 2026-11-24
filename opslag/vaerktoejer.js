@@ -2,11 +2,13 @@
 
 /*
  * Værktøjer, som vores egen server udfører, når AI'en beder om det:
- * dato og tid samt noter, der bliver gemt i noter.json på din egen computer.
+ * dato og tid, udregninger (med Hygge-sproget fra resten af repoet) og
+ * noter, der bliver gemt i noter.json på din egen computer.
  */
 
 const fs = require('fs');
 const path = require('path');
+const Hygge = require('../hygge');
 
 const TIDSZONE = 'Europe/Copenhagen';
 
@@ -75,6 +77,16 @@ class Noter {
   }
 }
 
+/** Regner et udtryk ud med Hygge, fx "(350 - 32) * 5 / 9". */
+function regn(udtryk) {
+  const tekst = String(udtryk ?? '').trim();
+  if (!tekst) throw new Error('Der er ikke noget at regne ud.');
+  if (tekst.includes('\n')) throw new Error('Skriv udtrykket på én linje.');
+  const r = Hygge.run(`skriv ${tekst}`, { maxSteps: 100000 });
+  if (r.error) throw new Error(r.error.message);
+  return r.output.filter((o) => o.type === 'tekst').map((o) => o.text).join('\n');
+}
+
 function formatNoter(noter) {
   if (!noter.length) return 'Ingen noter fundet.';
   return noter
@@ -95,6 +107,8 @@ function lavVaerktoejer({ noteFil }) {
       switch (navn) {
         case 'dato_og_tid':
           return datoOgTid();
+        case 'regn':
+          return regn(input.udtryk);
         case 'gem_note': {
           const note = noter.tilfoej(input.tekst, input.emne);
           return `Gemt som ${note.id}: ${note.tekst}`;
@@ -111,4 +125,4 @@ function lavVaerktoejer({ noteFil }) {
   };
 }
 
-module.exports = { lavVaerktoejer, datoOgTid, ugenummer, Noter };
+module.exports = { lavVaerktoejer, datoOgTid, ugenummer, regn, Noter };

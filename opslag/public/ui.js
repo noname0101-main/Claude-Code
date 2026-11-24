@@ -9,6 +9,8 @@
  *       { type: 'aktivitet', slags, tekst } hvad AI'en er i gang med
  *       { type: 'spoerg', id, tekst }       AI'en vil have lov til noget
  *       { type: 'advarsel', tekst }         noget gik galt
+ *       { type: 'kilder', kilder: [{url, titel}] }  kilder fra en websøgning
+ *       { type: 'info', tekst }             en lille note, fx hvad svaret kostede
  *   backend.godkend(id, ja)            svar på et 'spoerg'
  *   backend.stop()                     stop det, AI'en er i gang med
  *   backend.ny()                       start en ny samtale
@@ -260,6 +262,13 @@
           } else if (h.type === 'advarsel') {
             tilfoej(el('div', 'notice', h.tekst));
             fikSvar = true;
+          } else if (h.type === 'kilder' && Array.isArray(h.kilder) && h.kilder.length) {
+            const kilder = el('div', 'md sources');
+            kilder.innerHTML = '<p>Kilder fra søgningen:</p><ul>' + h.kilder
+              .map((k) => `<li>${link(escapeHtml(k.url), escapeHtml(k.titel || k.url))}</li>`).join('') + '</ul>';
+            tilfoej(kilder);
+          } else if (h.type === 'info') {
+            tilfoej(el('div', 'meta', h.tekst));
           }
         });
       } catch (e) {

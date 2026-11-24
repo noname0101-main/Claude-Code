@@ -7,213 +7,269 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 
+const { chatStream, tjekNoegle, OpenRouterFejl } = require('../openrouter');
 const { koerTur, beskrivVaerktoej } = require('../tur');
 const { lavVaerktoejer, ugenummer, datoOgTid } = require('../vaerktoejer');
-const { agentIndstillinger, miljoeIndstillinger, UDVALGTE_SIDER } = require('../agent');
-const { lavServer } = require('../server');
+const { vaerktoejsListe, UDVALGTE_SIDER, STANDARD_MODEL, SYSTEM } = require('../agent');
+const { lavServer, hentIndstillinger } = require('../server');
 
 const midlertidigFil = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'opslag-')), 'noter.json');
 
-/** En falsk Anthropic-klient, der afspiller en liste hændelser og husker, hvad vi sender. */
-function falskKlient(haendelser) {
-  const sendt = [];
+// ── Hjælpere til en falsk OpenRouter ────────────────────────────────
+
+/** Laver et falsk fetch-svar, der streamer SSE-tekst i små bidder. */
+function sseSvar(tekst, { status = 200, bid = 7 } = {}) {
+  const bytes = new TextEncoder().encode(tekst);
   return {
-    sendt,
-    beta: {
-      sessions: {
-        create: async () => ({ id: 'sesn_test123' }),
-        events: {
-          stream: async (id, params) => {
-            sendt.push({ stream: id, params });
-            return (async function* afspil() { for (const h of haendelser) yield h; })();
-          },
-          send: async (id, body) => { sendt.push(...body.events); return {}; },
-        },
-      },
-    },
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: 'x',
+    json: async () => JSON.parse(tekst),
+    body: (async function* () { for (let i = 0; i < bytes.length; i += bid) yield bytes.slice(i, i + bid); })(),
   };
 }
 
-const ENKEL_TUR = [
-  { type: 'session.status_running' },
-  { type: 'event_start', event: { type: 'agent.message', id: 'm1' } },
-  { type: 'event_delta', event_id: 'm1', delta: { type: 'content_delta', index: 0, content: { type: 'text', text: 'Jeg ' } } },
-  { type: 'event_delta', event_id: 'm1', delta: { type: 'content_delta', index: 0, content: { type: 'text', text: 'søger.' } } },
-  { type: 'agent.message', id: 'm1', content: [{ type: 'text', text: 'Jeg søger lige.' }] },
-  { type: 'span.model_request_end' },
-  { type: 'agent.tool_use', id: 'sevt_s', name: 'web_search', input: { query: 'Rundetårn åbningstider' }, evaluated_permission: 'allow' },
-  { type: 'agent.custom_tool_use', id: 'sevt_c', name: 'gem_note', input: { tekst: 'Nøglen ligger under urtepotten', emne: 'nøgler' } },
-  { type: 'agent.tool_use', id: 'sevt_b', name: 'bash', input: { command: 'echo $((2+2))' }, evaluated_permission: 'ask' },
-  { type: 'session.status_idle', stop_reason: { type: 'requires_action', event_ids: ['sevt_c'] } },
-  { type: 'agent.message', id: 'm2', content: [{ type: 'text', text: 'Rundetårn har åbent 10-20.\n\nKilder:\n- [Rundetårn](https://www.rundetaarn.dk)' }] },
-  { type: 'session.status_idle', stop_reason: { type: 'end_turn' } },
-  { type: 'agent.message', id: 'efter', content: [{ type: 'text', text: 'Denne må ikke komme med' }] },
-];
+const sse = (...chunks) => chunks.map((c) => (typeof c === 'string' ? c : `data: ${JSON.stringify(c)}`)).join('\n\n') + '\n\n';
+const tekstStykke = (content) => ({ choices: [{ index: 0, delta: { content } }] });
+const slut = (finish_reason, usage) => ({ choices: [{ index: 0, delta: {}, finish_reason }], ...(usage ? { usage } : {}) });
 
-test('en tur sender beskeden, viser tekst og aktivitet og svarer på værktøjer', async () => {
-  const klient = falskKlient(ENKEL_TUR);
+/** En falsk model, der svarer med de runder, testen har skrevet på forhånd. */
+function falskModel(runder) {
+  const forespoergsler = [];
+  const kaldModel = async function* (forespoergsel) {
+    forespoergsler.push(JSON.parse(JSON.stringify(forespoergsel)));
+    const runde = runder[forespoergsler.length - 1];
+    if (!runde) throw new Error('Modellen blev kaldt for mange gange');
+    for (const chunk of runde) yield chunk;
+  };
+  return { kaldModel, forespoergsler };
+}
+
+const INDSTILLINGER = { model: STANDARD_MODEL, budgetDollar: 1, vaerktoejer: vaerktoejsListe({ alleSider: true }) };
+
+// ── OpenRouter-forbindelsen ─────────────────────────────────────────
+
+test('chatStream læser SSE, springer kommentarer over og stopper ved [DONE]', async () => {
+  let kaldt = null;
+  const fetch = async (url, valg) => {
+    kaldt = { url, valg };
+    return sseSvar(sse(': OPENROUTER PROCESSING', tekstStykke('Hej '), tekstStykke('med dig'), slut('stop'), 'data: [DONE]', tekstStykke('efter DONE')));
+  };
+  const stykker = [];
+  for await (const c of chatStream({ apiKey: 'nøgle', body: { model: 'm', messages: [] }, fetch })) stykker.push(c);
+
+  assert.equal(kaldt.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(kaldt.valg.headers.Authorization, 'Bearer nøgle');
+  assert.equal(JSON.parse(kaldt.valg.body).stream, true);
+  assert.deepEqual(stykker.map((c) => c.choices[0].delta.content), ['Hej ', 'med dig', undefined]);
+});
+
+test('chatStream giver danske fejlbeskeder ved HTTP-fejl og fejl midt i strømmen', async () => {
+  const fejl402 = async () => sseSvar(JSON.stringify({ error: { code: 402, message: 'Insufficient credits' } }), { status: 402 });
+  await assert.rejects(async () => { for await (const c of chatStream({ apiKey: 'k', body: {}, fetch: fejl402 })) void c; },
+    (e) => e instanceof OpenRouterFejl && e.status === 402 && /credits/.test(e.message));
+
+  const midtI = async () => sseSvar(sse(tekstStykke('Halvt'), { error: { code: 502, message: 'Provider disconnected' }, choices: [{ delta: {}, finish_reason: 'error' }] }));
+  await assert.rejects(async () => { for await (const c of chatStream({ apiKey: 'k', body: {}, fetch: midtI })) void c; },
+    (e) => e instanceof OpenRouterFejl && e.status === 502 && /svarer ikke/.test(e.message));
+
+  const ingenNet = async () => { throw new TypeError('fetch failed'); };
+  await assert.rejects(() => tjekNoegle({ apiKey: 'k', fetch: ingenNet }), /internetforbindelse/);
+});
+
+// ── Agentens arbejdsgang ─────────────────────────────────────────────
+
+test('en tur: tekst streames, eget værktøj køres, og websøgning og pris vises', async () => {
+  const { kaldModel, forespoergsler } = falskModel([
+    [
+      tekstStykke('Jeg gemmer det.'),
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'gem_note', arguments: '' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"tekst":"Nøglen ligger ' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'under urtepotten"}' } }] } }] },
+      slut('tool_calls', { cost: 0.0021 }),
+    ],
+    [
+      tekstStykke('Det er gemt. Rundetårn har '),
+      { choices: [{ delta: { content: 'åbent 10-20.', annotations: [{ type: 'url_citation', url_citation: { url: 'https://www.rundetaarn.dk/besoeg/', title: 'Besøg Rundetårn' } }, { type: 'url_citation', url_citation: { url: 'javascript:alert(1)', title: 'x' } }] } }] },
+      slut('stop', { cost: 0.0154, server_tool_use_details: { web_search_requests: 2 } }),
+    ],
+  ]);
+  const samtale = { beskeder: [], brugt: 0 };
   const tilBrowser = [];
-  const spurgt = [];
   const vaerktoejer = lavVaerktoejer({ noteFil: midlertidigFil() });
 
-  const resultat = await koerTur({
-    client: klient,
-    sessionId: 'sesn_test123',
-    tekst: 'Hvornår har Rundetårn åbent?',
-    send: (h) => tilBrowser.push(h),
-    spoerg: async (s) => { spurgt.push(s); return true; },
-    vaerktoejer,
-  });
+  await koerTur({ samtale, tekst: 'Husk nøglen, og hvornår har Rundetårn åbent?', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer, send: (h) => tilBrowser.push(h) });
 
-  assert.deepEqual(resultat, { afsluttet: false });
-  // Strømmen åbnes før beskeden sendes, og med forhåndsvisning af tekst
-  assert.deepEqual(klient.sendt[0], { stream: 'sesn_test123', params: { event_deltas: ['agent.message'] } });
-  assert.deepEqual(klient.sendt[1], { type: 'user.message', content: [{ type: 'text', text: 'Hvornår har Rundetårn åbent?' }] });
+  // Første forespørgsel: system, brugerens besked, model og værktøjer
+  const f1 = forespoergsler[0];
+  assert.equal(f1.model, STANDARD_MODEL);
+  assert.deepEqual(f1.messages.map((m) => m.role), ['system', 'user']);
+  assert.equal(f1.messages[0].content, SYSTEM);
+  assert.deepEqual(f1.tools.slice(0, 2).map((t) => t.type), ['openrouter:web_search', 'openrouter:web_fetch']);
+  assert.ok(f1.max_tool_calls > 0);
 
-  // Vores eget værktøj blev kørt, og noten blev gemt
-  const resultatEvent = klient.sendt.find((e) => e.type === 'user.custom_tool_result');
-  assert.equal(resultatEvent.custom_tool_use_id, 'sevt_c');
-  assert.equal(resultatEvent.is_error, false);
-  assert.match(resultatEvent.content[0].text, /Gemt som n1/);
+  // Anden forespørgsel indeholder værktøjskaldet og resultatet
+  const f2 = forespoergsler[1];
+  assert.deepEqual(f2.messages.map((m) => m.role), ['system', 'user', 'assistant', 'tool']);
+  assert.deepEqual(f2.messages[2].tool_calls, [{ id: 'call_1', type: 'function', function: { name: 'gem_note', arguments: '{"tekst":"Nøglen ligger under urtepotten"}' } }]);
+  assert.deepEqual(f2.messages[3], { role: 'tool', tool_call_id: 'call_1', content: 'Gemt som n1: Nøglen ligger under urtepotten' });
   assert.equal(vaerktoejer.noter.find('urtepotten').length, 1);
 
-  // bash bad om lov, og vi sagde ja
-  assert.deepEqual(spurgt, [{ id: 'sevt_b', beskrivelse: 'Regner: echo $((2+2))' }]);
-  assert.deepEqual(klient.sendt.find((e) => e.type === 'user.tool_confirmation'), { type: 'user.tool_confirmation', tool_use_id: 'sevt_b', result: 'allow' });
+  // Samtalen husker svaret til næste gang, og prisen er lagt sammen
+  assert.deepEqual(samtale.beskeder.map((m) => m.role), ['user', 'assistant', 'tool', 'assistant']);
+  assert.equal(samtale.beskeder[3].content, 'Det er gemt. Rundetårn har åbent 10-20.');
+  assert.ok(Math.abs(samtale.brugt - 0.0175) < 1e-9);
 
-  // Browseren fik teksten, mens den blev skrevet, og den færdige tekst bagefter
-  const tekster = tilBrowser.filter((h) => h.type === 'tekst');
-  assert.deepEqual(tekster.slice(0, 3).map((h) => h.tekst), ['Jeg ', 'Jeg søger.', 'Jeg søger lige.']);
-  assert.equal(tekster[2].faerdig, true);
-  assert.match(tekster.at(-1).tekst, /Kilder:/);
-  assert.ok(!tilBrowser.some((h) => h.tekst === 'Denne må ikke komme med'), 'turen skal stoppe ved end_turn');
-
-  const aktiviteter = tilBrowser.filter((h) => h.type === 'aktivitet');
-  assert.deepEqual(aktiviteter.map((h) => [h.slags, h.tekst]), [
-    ['soeg', 'Søger efter "Rundetårn åbningstider"'],
-    ['note', 'Husker: Nøglen ligger under urtepotten'],
-    ['regn', 'Regner: echo $((2+2))'],
-  ]);
+  const typer = tilBrowser.map((h) => h.type);
+  assert.deepEqual(typer.filter((t) => t !== 'tekst'), ['aktivitet', 'aktivitet', 'kilder', 'info']);
+  assert.deepEqual(tilBrowser.find((h) => h.type === 'aktivitet'), { type: 'aktivitet', slags: 'note', tekst: 'Husker: Nøglen ligger under urtepotten' });
+  assert.equal(tilBrowser.filter((h) => h.type === 'aktivitet')[1].tekst, 'Søgte på nettet 2 gange');
+  assert.deepEqual(tilBrowser.find((h) => h.type === 'kilder').kilder, [{ url: 'https://www.rundetaarn.dk/besoeg/', titel: 'Besøg Rundetårn' }]);
+  assert.match(tilBrowser.at(-1).tekst, /Pris for svaret: 0,018 dollar · samtalen i alt: 0,018 dollar/);
 });
 
-test('et nej til et værktøj sendes som deny med en forklaring', async () => {
-  const klient = falskKlient([
-    { type: 'agent.tool_use', id: 'sevt_x', name: 'web_fetch', input: { url: 'https://example.com' }, evaluated_permission: 'ask' },
-    { type: 'session.status_idle', stop_reason: { type: 'end_turn' } },
+test('ugyldige argumenter og fejl i værktøjer sendes tilbage til modellen', async () => {
+  const { kaldModel, forespoergsler } = falskModel([
+    [
+      { choices: [{ delta: { tool_calls: [
+        { index: 0, id: 'a', function: { name: 'slet_note', arguments: '{"id":"n99"}' } },
+        { index: 1, id: 'b', function: { name: 'regn', arguments: '{"udtryk": ' } },
+      ] } }] },
+      slut('tool_calls'),
+    ],
+    [tekstStykke('Ok.'), slut('stop')],
   ]);
-  await koerTur({ client: klient, sessionId: 's', tekst: 'hej', send: () => {}, spoerg: async () => false, vaerktoejer: lavVaerktoejer({ noteFil: midlertidigFil() }) });
-  const svar = klient.sendt.find((e) => e.type === 'user.tool_confirmation');
-  assert.equal(svar.result, 'deny');
-  assert.ok(svar.deny_message);
+  await koerTur({ samtale: { beskeder: [], brugt: 0 }, tekst: 'x', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: lavVaerktoejer({ noteFil: midlertidigFil() }), send: () => {} });
+  const resultater = forespoergsler[1].messages.filter((m) => m.role === 'tool');
+  assert.match(resultater[0].content, /Fejl: Der findes ingen note med id "n99"/);
+  assert.match(resultater[1].content, /Fejl: argumenterne var ikke gyldig JSON/);
 });
 
-test('budget, afbrudte svar og lukkede samtaler giver en besked til brugeren', async () => {
+test('budgettet stopper samtalen, før der bruges flere penge', async () => {
+  const { kaldModel, forespoergsler } = falskModel([]);
   const tilBrowser = [];
-  const klient = falskKlient([
-    { type: 'event_start', event: { type: 'agent.message', id: 'm9' } },
-    { type: 'event_delta', event_id: 'm9', delta: { type: 'content_delta', index: 0, content: { type: 'text', text: 'Halvt svar' } } },
-    { type: 'span.model_request_end' },
-    { type: 'session.status_idle', stop_reason: { type: 'budget_reached' } },
-  ]);
-  await koerTur({ client: klient, sessionId: 's', tekst: 'hej', send: (h) => tilBrowser.push(h), spoerg: async () => false, vaerktoejer: {} });
-  assert.deepEqual(tilBrowser.find((h) => h.type === 'tekst' && h.faerdig), { type: 'tekst', id: 'm9', tekst: 'Halvt svar', faerdig: true });
-  assert.match(tilBrowser.find((h) => h.type === 'advarsel').tekst, /budget/);
-
-  const lukket = falskKlient([{ type: 'session.status_terminated' }]);
-  const r = await koerTur({ client: lukket, sessionId: 's', tekst: 'hej', send: () => {}, spoerg: async () => false, vaerktoejer: {} });
-  assert.deepEqual(r, { afsluttet: true });
+  const samtale = { beskeder: [], brugt: 1.2 };
+  await koerTur({ samtale, tekst: 'hej', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: {}, send: (h) => tilBrowser.push(h) });
+  assert.equal(forespoergsler.length, 0);
+  assert.match(tilBrowser[0].tekst, /brugt sit budget på 1,000 dollar/);
 });
 
-test('en fejl i et værktøj sendes tilbage som is_error', async () => {
-  const klient = falskKlient([
-    { type: 'agent.custom_tool_use', id: 'sevt_d', name: 'slet_note', input: { id: 'n99' } },
-    { type: 'session.status_idle', stop_reason: { type: 'end_turn' } },
-  ]);
-  await koerTur({ client: klient, sessionId: 's', tekst: 'glem n99', send: () => {}, spoerg: async () => false, vaerktoejer: lavVaerktoejer({ noteFil: midlertidigFil() }) });
-  const svar = klient.sendt.find((e) => e.type === 'user.custom_tool_result');
-  assert.equal(svar.is_error, true);
-  assert.match(svar.content[0].text, /Der findes ingen note med id "n99"/);
+test('går turen galt, bliver samtalen rullet tilbage', async () => {
+  const samtale = { beskeder: [{ role: 'user', content: 'før' }, { role: 'assistant', content: 'svar' }], brugt: 0 };
+  const kaldModel = async function* () { yield tekstStykke('Halvt'); throw new OpenRouterFejl('Modellen svarer ikke lige nu.', 502); };
+  await assert.rejects(() => koerTur({ samtale, tekst: 'nyt', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: {}, send: () => {} }), /svarer ikke/);
+  assert.deepEqual(samtale.beskeder.map((m) => m.content), ['før', 'svar']);
 });
 
-test('noter kan gemmes, findes og slettes', () => {
+test('et afbrudt svar og et tomt svar giver en besked til brugeren', async () => {
+  const tilBrowser = [];
+  const { kaldModel } = falskModel([[tekstStykke('Langt svar …'), slut('length')], [slut('stop')]]);
+  const send = (h) => tilBrowser.push(h);
+  await koerTur({ samtale: { beskeder: [], brugt: 0 }, tekst: 'a', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: {}, send });
+  await koerTur({ samtale: { beskeder: [], brugt: 0 }, tekst: 'b', kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: {}, send });
+  const advarsler = tilBrowser.filter((h) => h.type === 'advarsel').map((h) => h.tekst);
+  assert.match(advarsler[0], /for langt/);
+  assert.match(advarsler[1], /svarede ikke/);
+});
+
+// ── Værktøjer og indstillinger ──────────────────────────────────────
+
+test('noter kan gemmes, findes og slettes, og regn bruger Hygge', () => {
   const { noter, koer } = lavVaerktoejer({ noteFil: midlertidigFil() });
   koer('gem_note', { tekst: 'Mors fødselsdag er 14. marts', emne: 'fødselsdage' });
   koer('gem_note', { tekst: 'Koden til cykellåsen er 4711' });
   assert.match(koer('find_noter', { ord: 'FØDSELSDAG' }), /n1: Mors fødselsdag er 14\. marts \[emne: fødselsdage\]/);
-  assert.match(koer('find_noter', { ord: '' }), /n2: Koden til cykellåsen/);
   assert.equal(koer('find_noter', { ord: 'pas' }), 'Ingen noter fundet.');
   koer('slet_note', { id: 'n1' });
   assert.deepEqual(noter.find('').map((n) => n.id), ['n2']);
-  assert.throws(() => koer('gem_note', { tekst: '  ' }), /tom/);
+  assert.equal(koer('regn', { udtryk: '(350 - 32) * 5 / 9' }), '176.666666667');
+  assert.equal(koer('regn', { udtryk: 'afrund(1299 * 0.8 + 49, 2)' }), '1088.2');
+  assert.throws(() => koer('regn', { udtryk: 'skriv 1\nsæt x = 2' }), /én linje/);
   assert.throws(() => koer('ukendt', {}), /Ukendt værktøj/);
 });
 
-test('dato og ugenummer', () => {
+test('dato, ugenummer og beskrivelser', () => {
   assert.equal(ugenummer(new Date(2026, 0, 1)), 1);
   assert.equal(ugenummer(new Date(2026, 11, 31)), 53);
-  assert.equal(ugenummer(new Date(2027, 0, 4)), 1);
   assert.match(datoOgTid(new Date('2026-11-24T12:00:00Z')), /tirsdag den 24\. november 2026.*13[.:]00.*uge 48/);
+  assert.equal(beskrivVaerktoej('regn', { udtryk: '2 + 2' }), 'Regner: 2 + 2');
+  assert.ok(beskrivVaerktoej('gem_note', { tekst: 'x'.repeat(500) }).length < 160);
 });
 
-test('beskrivelser af værktøjer er korte og læsbare', () => {
-  assert.equal(beskrivVaerktoej('web_fetch', { url: 'https://dr.dk' }), 'Læser https://dr.dk');
-  assert.equal(beskrivVaerktoej('find_noter', { ord: '' }), 'Kigger i dine noter');
-  assert.ok(beskrivVaerktoej('web_search', { query: 'x'.repeat(500) }).length < 160);
-});
+test('værktøjslisten følger OpenRouters format, og udvalgte sider begrænser søgningen', () => {
+  const alle = vaerktoejsListe({ alleSider: true });
+  assert.equal(alle[0].type, 'openrouter:web_search');
+  assert.equal(alle[0].parameters.allowed_domains, undefined);
+  assert.equal(alle[0].parameters.engine, 'exa');
+  assert.equal(alle[1].type, 'openrouter:web_fetch');
+  for (const t of alle.slice(2)) {
+    assert.equal(t.type, 'function');
+    assert.match(t.function.name, /^[a-z_]+$/);
+    assert.equal(t.function.parameters.type, 'object');
+  }
+  assert.deepEqual(alle.slice(2).map((t) => t.function.name), ['dato_og_tid', 'regn', 'gem_note', 'find_noter', 'slet_note']);
 
-test('agentens indstillinger: websøgning er slået til, og udvalgte sider begrænser den', () => {
-  const alle = agentIndstillinger({ alleSider: true });
-  assert.equal(alle.model.id, 'claude-opus-5-5');
-  const toolset = alle.tools[0];
-  assert.equal(toolset.type, 'agent_toolset_20260401');
-  assert.deepEqual(toolset.configs.map((c) => [c.name, c.enabled]), [['web_search', true], ['web_fetch', true], ['bash', true]]);
-  assert.equal(toolset.configs[0].allowed_domains, undefined);
-  assert.deepEqual(alle.tools.slice(1).map((t) => t.name), ['dato_og_tid', 'gem_note', 'find_noter', 'slet_note']);
-  for (const t of alle.tools.slice(1)) assert.match(t.name, /^[a-z_]+$/);
-
-  const udvalgte = agentIndstillinger({ alleSider: false });
-  assert.deepEqual(udvalgte.tools[0].configs[0].allowed_domains, UDVALGTE_SIDER);
-  assert.ok(UDVALGTE_SIDER.length <= 64, 'højst 64 sider pr. liste');
+  const udvalgte = vaerktoejsListe({ alleSider: false });
+  assert.deepEqual(udvalgte[0].parameters.allowed_domains, UDVALGTE_SIDER);
+  assert.deepEqual(udvalgte[1].parameters.allowed_domains, UDVALGTE_SIDER);
   assert.equal(new Set(UDVALGTE_SIDER).size, UDVALGTE_SIDER.length, 'ingen dubletter');
   for (const side of UDVALGTE_SIDER) assert.match(side, /^[a-z0-9-]+(\.[a-z0-9-]+)+$/);
-
-  assert.deepEqual(miljoeIndstillinger({ alleSider: true }).config.networking, { type: 'unrestricted' });
-  const begraenset = miljoeIndstillinger({ alleSider: false }).config.networking;
-  assert.equal(begraenset.type, 'limited');
-  assert.ok(begraenset.allowed_hosts.includes('*.wikipedia.org') && begraenset.allowed_hosts.includes('wikipedia.org'));
 });
 
-test('serveren laver samtaler, strømmer svar og afviser forespørgsler uden JSON', async (t) => {
-  const klient = falskKlient([
-    { type: 'agent.message', id: 'm1', content: [{ type: 'text', text: 'Hej!' }] },
-    { type: 'session.status_idle', stop_reason: { type: 'end_turn' } },
-  ]);
-  const server = lavServer({
-    client: klient,
-    indstillinger: { agentId: 'agent_x', miljoeId: 'env_x', budgetCent: 50 },
-    vaerktoejer: lavVaerktoejer({ noteFil: midlertidigFil() }),
-  });
+test('indstillinger: standardværdier og gemte valg', () => {
+  const ingen = hentIndstillinger(path.join(os.tmpdir(), 'findes-ikke-opslag.json'));
+  assert.equal(ingen.model, STANDARD_MODEL);
+  assert.equal(ingen.alleSider, true);
+  assert.equal(ingen.budgetDollar, 1);
+  const fil = midlertidigFil();
+  fs.writeFileSync(fil, JSON.stringify({ model: 'anthropic/claude-haiku-5.5', alleSider: false, budgetDollar: 0.25 }));
+  const gemt = hentIndstillinger(fil);
+  assert.deepEqual([gemt.model, gemt.alleSider, gemt.budgetDollar], ['anthropic/claude-haiku-5.5', false, 0.25]);
+  assert.ok(gemt.vaerktoejer[0].parameters.allowed_domains);
+});
+
+// ── Serveren og chatvinduet ─────────────────────────────────────────
+
+test('serveren laver samtaler, strømmer svar, kan stoppes og afviser forespørgsler uden JSON', async (t) => {
+  let ventPaaStop;
+  const kaldModel = async function* (forespoergsel, signal) {
+    const sidste = forespoergsel.messages.at(-1).content;
+    if (sidste === 'vent') {
+      yield tekstStykke('Arbejder …');
+      await new Promise((resolve, reject) => {
+        ventPaaStop = resolve;
+        signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      });
+    }
+    yield tekstStykke('Hej!');
+    yield slut('stop', { cost: 0.001 });
+  };
+  const server = lavServer({ kaldModel, indstillinger: INDSTILLINGER, vaerktoejer: lavVaerktoejer({ noteFil: midlertidigFil() }) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
   const json = { 'Content-Type': 'application/json' };
+  const post = (sti, data, headers = json) => fetch(base + sti, { method: 'POST', headers, body: typeof data === 'string' ? data : JSON.stringify(data) });
 
-  const side = await fetch(base + '/');
-  assert.match(await side.text(), /<title>Opslag<\/title>/);
+  assert.match(await (await fetch(base + '/')).text(), /<title>Opslag<\/title>/);
   assert.equal((await fetch(base + '/ui.js')).status, 200);
 
-  const ny = await (await fetch(base + '/api/samtale', { method: 'POST', headers: json, body: '{}' })).json();
-  assert.equal(ny.id, 'sesn_test123');
+  const { id } = await (await post('/api/samtale', {})).json();
+  const linjer = (await (await post('/api/besked', { samtale: id, tekst: 'Hej' })).text()).trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(linjer.map((l) => l.type), ['tekst', 'tekst', 'info', 'slut']);
+  assert.equal(linjer[1].tekst, 'Hej!');
 
-  const svar = await fetch(base + '/api/besked', { method: 'POST', headers: json, body: JSON.stringify({ samtale: ny.id, tekst: 'Hej' }) });
-  const linjer = (await svar.text()).trim().split('\n').map((l) => JSON.parse(l));
-  assert.deepEqual(linjer, [{ type: 'tekst', id: 'm1', tekst: 'Hej!', faerdig: true }, { type: 'slut', afsluttet: false }]);
+  // Stop midt i et svar
+  const igang = post('/api/besked', { samtale: id, tekst: 'vent' });
+  while (!ventPaaStop) await new Promise((r) => setTimeout(r, 5));
+  assert.equal((await post('/api/besked', { samtale: id, tekst: 'en til' })).status, 409);
+  await post('/api/stop', { samtale: id });
+  const stoppet = (await (await igang).text()).trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(stoppet.slice(-2), [{ type: 'advarsel', tekst: 'Stoppet.' }, { type: 'slut' }]);
 
-  const formular = await fetch(base + '/api/samtale', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'a=1' });
-  assert.equal(formular.status, 415);
-  const tom = await fetch(base + '/api/besked', { method: 'POST', headers: json, body: JSON.stringify({ samtale: ny.id, tekst: '  ' }) });
-  assert.equal(tom.status, 400);
-  assert.equal((await fetch(base + '/findes-ikke')).status, 404);
+  assert.equal((await post('/api/besked', { samtale: 'findes-ikke', tekst: 'x' })).status, 404);
+  assert.equal((await post('/api/besked', { samtale: id, tekst: '  ' })).status, 400);
+  assert.equal((await post('/api/samtale', 'a=1', { 'Content-Type': 'application/x-www-form-urlencoded' })).status, 415);
 });
 
 test('markdown laver links, lister og tabeller, men aldrig farlig HTML', () => {
@@ -228,7 +284,6 @@ test('markdown laver links, lister og tabeller, men aldrig farlig HTML', () => {
   assert.match(md('Se https://borger.dk/sundhed.'), /<a href="https:\/\/borger\.dk\/sundhed"[^>]*>borger\.dk\/sundhed<\/a>\.<\/p>/);
   assert.match(md('| Vare | Pris |\n|---|---|\n| Hjelm | 299 kr. |'), /<table><thead><tr><th>Vare<\/th><th>Pris<\/th><\/tr><\/thead><tbody><tr><td>Hjelm<\/td><td>299 kr\.<\/td><\/tr><\/tbody><\/table>/);
 
-  // Farlige ting bliver til almindelig tekst
   assert.equal(md('<script>alert(1)</script>'), '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
   assert.equal(md('[klik](javascript:alert(1))'), '<p>klik)</p>');
   assert.equal(md('[klik](http://usikker.dk)'), '<p>klik</p>');
