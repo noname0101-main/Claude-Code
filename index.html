@@ -1,0 +1,1443 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hygge Kodesprog</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: et værksted – koden til venstre, resultatet til højre og håndbogen nedenunder. På telefonen stables det hele. */
+:root {
+  --paper: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #edf0f6;
+  --ink: #17203a;
+  --muted: #5a6380;
+  --line: #d8deea;
+  --accent: #2147c4;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4eaff;
+  --flame: #ffb43a;
+  --ok: #1d7446;
+  --ok-soft: #e1f4e9;
+  --warn: #8f5200;
+  --warn-soft: #fdf0dc;
+  --err: #be2626;
+  --err-soft: #fde7e7;
+  --sel: rgba(33, 71, 196, 0.2);
+  --canvas: #fcfdff;
+  --grid: #e5eaf4;
+  --grid-strong: #c6d0e6;
+  --syn-kw: #ad1f57;
+  --syn-str: #1d7446;
+  --syn-num: #a04f00;
+  --syn-com: #7a8298;
+  --syn-bi: #6a3bbd;
+  --syn-fn: #2147c4;
+
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --code-size: 14.5px;
+  --code-lh: 23px;
+  --pad-y: 14px;
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1118; --surface: #151a24; --surface-2: #1b2130; --ink: #e4e8f3; --muted: #98a1ba; --line: #283043;
+    --accent: #87a3ff; --accent-ink: #0b1124; --accent-soft: #1c2650; --flame: #ffb43a;
+    --ok: #63d39b; --ok-soft: #133224; --warn: #ffb65e; --warn-soft: #35260f; --err: #ff8080; --err-soft: #3b1a20;
+    --sel: rgba(135, 163, 255, 0.28); --canvas: #121722; --grid: #1c2231; --grid-strong: #2c3550;
+    --syn-kw: #ff7cab; --syn-str: #74d9a4; --syn-num: #ffb469; --syn-com: #7c8499; --syn-bi: #bca0ff; --syn-fn: #8eaaff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1118; --surface: #151a24; --surface-2: #1b2130; --ink: #e4e8f3; --muted: #98a1ba; --line: #283043;
+  --accent: #87a3ff; --accent-ink: #0b1124; --accent-soft: #1c2650; --flame: #ffb43a;
+  --ok: #63d39b; --ok-soft: #133224; --warn: #ffb65e; --warn-soft: #35260f; --err: #ff8080; --err-soft: #3b1a20;
+  --sel: rgba(135, 163, 255, 0.28); --canvas: #121722; --grid: #1c2231; --grid-strong: #2c3550;
+  --syn-kw: #ff7cab; --syn-str: #74d9a4; --syn-num: #ffb469; --syn-com: #7c8499; --syn-bi: #bca0ff; --syn-fn: #8eaaff;
+  color-scheme: dark;
+}
+@media (pointer: coarse) {
+  /* 16px forhindrer telefoner i at zoome ind, når man trykker i editoren */
+  :root { --code-size: 16px; --code-lh: 25px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.55 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd, pre, textarea { font-variant-ligatures: none; }
+code, kbd { font-family: var(--font-code); font-size: 0.9em; }
+kbd {
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: var(--surface);
+}
+button { font: inherit; color: inherit; }
+
+.wrap {
+  max-width: 1260px;
+  margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ── Top ─────────────────────────────────────────────── */
+.masthead { background: var(--surface); border-bottom: 1px solid var(--line); }
+.masthead-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+  padding-block: 18px;
+}
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { flex: none; width: 52px; height: 52px; border-radius: 14px; background: var(--ink); color: var(--paper); }
+.logo svg { display: block; width: 100%; height: 100%; }
+h1 {
+  margin: 0;
+  font: 800 34px/1 var(--font-display);
+  letter-spacing: -0.03em;
+}
+.tagline { margin: 6px 0 0; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+.tagline code { color: var(--syn-kw); }
+.picker { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.picker select {
+  font: 500 15px var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 230px;
+  max-width: 100%;
+}
+
+/* ── Arbejdsfladen ───────────────────────────────────── */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding-block: 20px 8px;
+}
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+.pane {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 54px;
+  padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.pane-head h2 { margin: 0; font: 600 16px var(--font-display); }
+.cursor-pos { margin-left: auto; color: var(--muted); font: 12px var(--font-code); font-variant-numeric: tabular-nums; }
+.run {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 15px var(--font-body);
+  cursor: pointer;
+}
+.run svg { width: 14px; height: 14px; }
+.run:hover { filter: brightness(1.08); }
+.run:active { transform: translateY(1px); }
+.run.small { padding: 7px 14px; font-size: 14px; }
+
+/* Editoren: en gennemsigtig textarea ovenpå farvelagt kode */
+.editor {
+  position: relative;
+  display: flex;
+  height: 500px;
+  font: 400 var(--code-size)/var(--code-lh) var(--font-code);
+  font-variant-ligatures: none;
+}
+@media (max-width: 600px) { .editor { height: 400px; } }
+.gutter {
+  flex: none;
+  min-width: 3.4em;
+  padding: var(--pad-y) 10px calc(var(--pad-y) + 40px) 8px;
+  overflow: hidden;
+  white-space: pre;
+  text-align: right;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-right: 1px solid var(--line);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.gutter .err { color: var(--err); font-weight: 600; }
+.code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+.hl, #code {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  padding: var(--pad-y) 18px var(--pad-y) 14px;
+  font: inherit;
+  letter-spacing: 0;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+  tab-size: 4;
+}
+.hl { overflow: hidden; padding-bottom: calc(var(--pad-y) + 40px); color: var(--ink); pointer-events: none; }
+#code {
+  resize: none;
+  overflow: auto;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ink);
+}
+#code::selection { background: var(--sel); }
+.err-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--pad-y) + (var(--line, 1) - 1) * var(--code-lh));
+  height: var(--code-lh);
+  background: var(--err-soft);
+  box-shadow: inset 3px 0 0 var(--err);
+  pointer-events: none;
+}
+.t-kw { color: var(--syn-kw); font-weight: 600; }
+.t-val { color: var(--syn-num); font-weight: 600; }
+.t-str { color: var(--syn-str); }
+.t-num { color: var(--syn-num); }
+.t-com { color: var(--syn-com); font-style: italic; }
+.t-bi { color: var(--syn-bi); }
+.t-fn { color: var(--syn-fn); }
+.keys {
+  margin: 0;
+  padding: 9px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+@media (pointer: coarse) { .keys { display: none; } }
+
+/* Resultat-siden */
+.tabs { display: flex; gap: 2px; margin-left: -6px; }
+.tabs button {
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: none;
+  color: var(--muted);
+  font: 500 14px var(--font-body);
+  cursor: pointer;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.status {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.status:empty { display: none; }
+.status.is-ok { background: var(--ok-soft); color: var(--ok); }
+.status.is-err { background: var(--err-soft); color: var(--err); }
+.status.is-wait { background: var(--warn-soft); color: var(--warn); }
+
+.console {
+  min-height: 150px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px 16px;
+  font: 400 14px/1.6 var(--font-code);
+}
+.out-line { min-height: 1.6em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.out-qa { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.out-qa .q { color: var(--muted); }
+.out-qa .a { color: var(--accent); font-weight: 600; }
+.out-empty { margin: 0; color: var(--muted); font-family: var(--font-body); }
+.out-error, .out-ask {
+  margin-top: 10px;
+  padding: 10px 12px 12px;
+  border-radius: 9px;
+  font-family: var(--font-body);
+}
+.out-error { background: var(--err-soft); border: 1px solid var(--err); }
+.out-error strong {
+  display: block;
+  color: var(--err);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.out-error p { margin: 4px 0 6px; overflow-wrap: anywhere; }
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.out-ask { background: var(--accent-soft); border: 1px dashed var(--accent); }
+.out-ask label { display: block; font-weight: 600; }
+.ask-row { display: flex; gap: 8px; margin-top: 8px; }
+.ask-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 16px var(--font-code);
+}
+
+.paper-wrap { padding: 2px 16px 16px; }
+.console[hidden] + .paper-wrap { padding-top: 16px; }
+.paper {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 1;
+  margin-inline: auto;
+  border: 1px solid var(--grid-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--canvas);
+  /* Ternet papir: 20 tern på hver led, og akserne gennem midten */
+  background-image:
+    linear-gradient(to right, transparent calc(50% - 0.5px), var(--grid-strong) calc(50% - 0.5px), var(--grid-strong) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--grid-strong) calc(50% - 0.5px), var(--grid-strong) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 5% 5%, 5% 5%;
+}
+.paper canvas { display: block; width: 100%; height: 100%; }
+.paper-caption { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; text-align: center; }
+
+.inspect { max-height: 560px; overflow: auto; padding: 14px 16px 18px; }
+.explain { margin: 0 0 14px; max-width: 62ch; color: var(--muted); font-size: 14px; }
+.tok-line { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+.tok-ln { flex: none; width: 2.2em; padding-top: 5px; color: var(--muted); font: 12px var(--font-code); text-align: right; }
+.tok-chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.tok {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: 100%;
+  padding: 2px 7px 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.tok-v { overflow: hidden; text-overflow: ellipsis; white-space: pre; font: 13px var(--font-code); }
+.tok-t { color: var(--muted); font-size: 10.5px; letter-spacing: 0.03em; }
+.tok-kw .tok-v { color: var(--syn-kw); font-weight: 600; }
+.tok-num .tok-v { color: var(--syn-num); }
+.tok-str .tok-v { color: var(--syn-str); }
+.tok-op .tok-v { color: var(--syn-bi); }
+.tok-nl .tok-v { color: var(--muted); }
+
+.tree ul { list-style: none; margin: 0 0 0 7px; padding-left: 16px; border-left: 1px solid var(--line); }
+.tree > ul { margin: 0; padding: 0; border: 0; }
+.tree li { padding: 3px 0; }
+.node { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font: 13px var(--font-code); }
+.node .role { color: var(--muted); font: 11.5px var(--font-body); }
+.node .lbl { padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); overflow-wrap: anywhere; }
+.node .tag { color: var(--muted); font: 11px var(--font-body); }
+.node.stmt .lbl { color: var(--syn-kw); font-weight: 600; }
+.node.lit .lbl { color: var(--syn-str); }
+.node.op .lbl { color: var(--syn-bi); }
+.node.name .lbl, .node.call .lbl { color: var(--syn-fn); }
+
+/* ── Håndbogen ────────────────────────────────────────── */
+.handbook { padding-block: 44px 24px; }
+.section-title { margin: 0 0 6px; font: 800 30px/1.1 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
+.lead { margin: 0 0 28px; max-width: 64ch; color: var(--muted); }
+.hb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 30px 28px;
+}
+.hb-item { min-width: 0; }
+.hb-item h3 { margin: 0 0 4px; font: 600 18px/1.25 var(--font-display); }
+.hb-item p { margin: 0 0 10px; color: var(--muted); font-size: 14.5px; }
+.hb-item p code { color: var(--ink); }
+pre.sample {
+  margin: 0;
+  overflow-x: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  font: 13.5px/1.6 var(--font-code);
+  font-variant-ligatures: none;
+}
+.subsection { margin-top: 52px; }
+.subsection > h2 { margin: 0 0 6px; font: 800 24px/1.15 var(--font-display); letter-spacing: -0.015em; }
+.fn-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 28px;
+}
+.fn-group h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font: 600 12.5px var(--font-body);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.fn-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.fn-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.fn-table td:first-child { width: 44%; padding-right: 14px; color: var(--syn-bi); font: 13px/1.5 var(--font-code); overflow-wrap: anywhere; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding: 0; list-style: none; }
+.swatches li { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font: 13px var(--font-code); }
+.swatches i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); }
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 24px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: trin;
+}
+.steps li { counter-increment: trin; }
+.steps li::before {
+  content: counter(trin);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 800 17px var(--font-display);
+}
+.steps h3 { margin: 0 0 4px; font: 600 17px var(--font-display); }
+.steps p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.footer { padding-block: 28px 40px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); margin-top: 48px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 52 52">
+          <path d="M18 13c-4 0-5.5 2-5.5 5.5v4c0 2.2-1.2 3.5-3.5 3.5 2.3 0 3.5 1.3 3.5 3.5v4c0 3.5 1.5 5.5 5.5 5.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M34 13c4 0 5.5 2 5.5 5.5v4c0 2.2 1.2 3.5 3.5 3.5-2.3 0-3.5 1.3-3.5 3.5v4c0 3.5-1.5 5.5-5.5 5.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M26 14.5c3.8 4.6 6 8.2 6 11.6a6 6 0 0 1-12 0c0-3.4 2.2-7 6-11.6z" fill="var(--flame)"/>
+          <rect x="24" y="33" width="4" height="7" rx="1.2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Hygge</h1>
+        <p class="tagline">Et lille programmeringssprog på dansk. Skriv kode med ord som <code>sæt</code>, <code>hvis</code> og <code>gentag</code>, og se den køre med det samme.</p>
+      </div>
+    </div>
+    <label class="picker" for="examples">
+      Eksempler
+      <select id="examples"></select>
+    </label>
+  </div>
+</header>
+
+<main class="wrap workspace">
+  <section class="pane" aria-labelledby="code-title">
+    <div class="pane-head">
+      <h2 id="code-title">Din kode</h2>
+      <span class="cursor-pos" id="cursor">Linje 1, tegn 1</span>
+      <button class="run" id="run" type="button">
+        <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.8v10.4c0 .6.7 1 1.2.7l8.2-5.2c.5-.3.5-1 0-1.4L4.2 1.1C3.7.8 3 1.2 3 1.8z" fill="currentColor"/></svg>
+        Kør
+      </button>
+    </div>
+    <div class="editor">
+      <div class="gutter" id="gutter" aria-hidden="true"></div>
+      <div class="code">
+        <div class="err-bar" id="errbar" hidden></div>
+        <pre class="hl" id="hl" aria-hidden="true"></pre>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="Din kode"></textarea>
+      </div>
+    </div>
+    <p class="keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> kører programmet · <kbd>Tab</kbd> rykker ind · Tryk <kbd>Esc</kbd> og så <kbd>Tab</kbd> for at forlade editoren</p>
+  </section>
+
+  <section class="pane" aria-label="Resultat">
+    <div class="pane-head">
+      <div class="tabs" role="tablist" aria-label="Visning">
+        <button role="tab" id="tab-result" aria-selected="true" aria-controls="panel-result" type="button">Resultat</button>
+        <button role="tab" id="tab-tokens" aria-selected="false" aria-controls="panel-tokens" tabindex="-1" type="button">Tokens</button>
+        <button role="tab" id="tab-tree" aria-selected="false" aria-controls="panel-tree" tabindex="-1" type="button">Syntakstræ</button>
+      </div>
+      <span class="status" id="status" role="status"></span>
+    </div>
+
+    <div role="tabpanel" id="panel-result" aria-labelledby="tab-result">
+      <div class="console" id="console" aria-live="polite"></div>
+      <div class="paper-wrap" id="paper-wrap" hidden>
+        <div class="paper" id="paper"><canvas id="canvas" aria-label="Skildpaddens tegning" role="img"></canvas></div>
+        <p class="paper-caption">Papiret går fra −200 til 200 på begge leder. Hvert tern er 20 skridt.</p>
+      </div>
+    </div>
+
+    <div role="tabpanel" id="panel-tokens" aria-labelledby="tab-tokens" class="inspect" hidden>
+      <p class="explain">Det første, Hygge gør, er at dele din kode op i <strong>tokens</strong>: nøgleord, navne, tal, tekster og tegn. Det er sådan, computeren begynder at læse.</p>
+      <div id="tokens"></div>
+    </div>
+
+    <div role="tabpanel" id="panel-tree" aria-labelledby="tab-tree" class="inspect" hidden>
+      <p class="explain">Bagefter bygger Hygge et <strong>syntakstræ</strong> af dine tokens. Træet viser, hvilke dele der hører sammen, fx at <code>2 + 3 * 4</code> betyder 2 + (3 * 4). Fortolkeren kører programmet ved at gå træet igennem.</p>
+      <div id="tree" class="tree"></div>
+    </div>
+  </section>
+</main>
+
+<section class="wrap handbook" aria-labelledby="handbook-title">
+  <h2 class="section-title" id="handbook-title">Håndbog</h2>
+  <p class="lead">Alt, hvad Hygge kan, på én side. Hver kommando står på sin egen linje, og blokke står mellem <code>{</code> og <code>}</code>.</p>
+
+  <div class="hb-grid">
+    <article class="hb-item">
+      <h3>Skriv noget</h3>
+      <p><code>skriv</code> viser tekst og tal. Kommaer sætter mellemrum mellem værdierne.</p>
+      <pre class="sample"><code>skriv "Hej verden!"
+skriv "2 + 2 =", 2 + 2</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Variabler</h3>
+      <p>En variabel er en kasse med et navn. <code>sæt</code> lægger en værdi i kassen.</p>
+      <pre class="sample"><code>sæt navn = "Ida"
+sæt point = 10
+sæt point += 5     # nu er point 15</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Regning</h3>
+      <p><code>+ - * /</code> som du kender dem. <code>%</code> giver resten ved division, og <code>^</code> opløfter. Decimaltal skrives med punktum.</p>
+      <pre class="sample"><code>skriv 17 % 5     # 2
+skriv 2 ^ 8      # 256
+skriv 3.5 * 2    # 7</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Tekst</h3>
+      <p>Tekst står i anførselstegn. Med <code>+</code> sætter du tekster sammen.</p>
+      <pre class="sample"><code>sæt hilsen = "Hej " + navn
+skriv længde(hilsen)
+skriv "ha" * 3   # hahaha</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Sammenligning</h3>
+      <p><code>=</code> betyder "er lig med", og <code>!=</code> betyder "er forskellig fra". Kombinér med <code>og</code>, <code>eller</code> og <code>ikke</code>. Svaret er <code>sandt</code> eller <code>falsk</code>.</p>
+      <pre class="sample"><code>skriv 3 &lt; 5           # sandt
+skriv alder &gt;= 13 og ikke træt</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Hvis og ellers</h3>
+      <p>Programmet vælger, hvilken blok der skal køres.</p>
+      <pre class="sample"><code>hvis point &gt; 100 {
+    skriv "Ny rekord!"
+} ellers hvis point &gt; 50 {
+    skriv "Godt gået"
+} ellers {
+    skriv "Prøv igen"
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Gentag</h3>
+      <p>Den letteste løkke. Den kører blokken et bestemt antal gange.</p>
+      <pre class="sample"><code>gentag 3 gange {
+    skriv "Hurra!"
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>For-løkker</h3>
+      <p>Tæller fra et tal til et andet. Med <code>trin</code> bestemmer du, hvor store skridt der tages.</p>
+      <pre class="sample"><code>for i fra 1 til 5 {
+    skriv i * i
+}
+for i fra 10 til 0 trin -2 {
+    skriv i
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Mens</h3>
+      <p>Kører, så længe betingelsen er sand. <code>stop</code> hopper ud af løkken, og <code>fortsæt</code> springer til næste runde.</p>
+      <pre class="sample"><code>sæt liv = 3
+mens liv &gt; 0 {
+    skriv "Liv tilbage:", liv
+    sæt liv -= 1
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Lister</h3>
+      <p>En liste gemmer flere værdier. Pladserne tælles fra 0, og <code>-1</code> er den sidste.</p>
+      <pre class="sample"><code>sæt frugter = ["æble", "pære"]
+tilføj(frugter, "banan")
+skriv frugter[0], frugter[-1]
+for hver frugt i frugter {
+    skriv frugt
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Funktioner</h3>
+      <p>En funktion er en opskrift, du kan bruge igen. <code>returner</code> giver et svar tilbage.</p>
+      <pre class="sample"><code>funktion hils(navn) {
+    returner "Hej " + navn + "!"
+}
+skriv hils("Malik")</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Spørg brugeren</h3>
+      <p><code>spørg</code> venter på et svar. Svaret er tekst, så brug <code>tal(...)</code>, hvis du vil regne med det.</p>
+      <pre class="sample"><code>sæt navn = spørg("Hvad hedder du?")
+sæt alder = tal(spørg("Hvor gammel er du?"))
+skriv navn, "fylder", alder + 1, "næste år"</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Tegn med skildpadden</h3>
+      <p>Skildpadden starter midt på papiret i (0, 0) og kigger opad. Den tegner, når den går.</p>
+      <pre class="sample"><code>farve("blå")
+gentag 4 gange {
+    fremad(100)
+    drej_højre(90)
+}</code></pre>
+    </article>
+    <article class="hb-item">
+      <h3>Kommentarer</h3>
+      <p>Alt efter <code>#</code> er en note til dig selv. Hygge springer det over.</p>
+      <pre class="sample"><code># Dette er en kommentar
+skriv "Dette bliver vist"   # og dette er også en kommentar</code></pre>
+    </article>
+  </div>
+
+  <div class="subsection" aria-labelledby="fn-title">
+    <h2 id="fn-title">Indbyggede funktioner</h2>
+    <p class="lead">Funktioner, der følger med Hygge. Du kalder dem med parenteser, fx <code>længde(liste)</code>.</p>
+    <div class="fn-groups" id="fn-groups"></div>
+  </div>
+
+  <div class="subsection" aria-labelledby="inside-title">
+    <h2 id="inside-title">Sådan virker Hygge indeni</h2>
+    <p class="lead">Hygge er skrevet i JavaScript i filen <code>hygge.js</code>. Den arbejder i tre trin, ligesom rigtige programmeringssprog som Python og JavaScript gør.</p>
+    <ol class="steps">
+      <li>
+        <h3>Lexeren deler koden op</h3>
+        <p>Koden bliver delt op i tokens: ord, tal, tekster og tegn. Se dem under fanen <button class="link-btn" type="button" data-open-tab="tab-tokens">Tokens</button>.</p>
+      </li>
+      <li>
+        <h3>Parseren bygger et træ</h3>
+        <p>Tokens bliver sat sammen til et syntakstræ, der viser, hvad der hører sammen. Se det under <button class="link-btn" type="button" data-open-tab="tab-tree">Syntakstræ</button>.</p>
+      </li>
+      <li>
+        <h3>Fortolkeren kører træet</h3>
+        <p>Fortolkeren går træet igennem fra toppen og udfører hver del. Hver kommando er et skridt, og antallet af skridt står ved resultatet.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<footer class="wrap footer">
+  Hygge 1.0 · Hele sproget ligger i <code>hygge.js</code>, og eksemplerne ligger i <code>eksempler.js</code>. Din kode bliver gemt i denne browser.
+</footer>
+
+<script src="hygge.js"></script>
+<script src="eksempler.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const H = window.Hygge;
+  const EXAMPLES = window.HyggeEksempler || [];
+  const $ = (id) => document.getElementById(id);
+
+  const codeEl = $('code');
+  const hlEl = $('hl');
+  const gutterEl = $('gutter');
+  const errBar = $('errbar');
+  const cursorEl = $('cursor');
+  const consoleEl = $('console');
+  const statusEl = $('status');
+  const paperWrap = $('paper-wrap');
+  const paperEl = $('paper');
+  const canvas = $('canvas');
+  const picker = $('examples');
+
+  const CODE_KEY = 'hygge-kode';
+  const OWN_KEY = 'hygge-eget';
+  const store = {
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* lagring er ikke tilgængelig */ } },
+  };
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Farvelægning af koden
+  // ════════════════════════════════════════════════════════════
+
+  const KW = new Set(H.KEYWORDS);
+  const VALUES = new Set(['sandt', 'falsk', 'intet']);
+  const CTX = new Set(['gange', 'fra', 'til', 'trin']);
+  const BUILTIN = new Set(H.BUILTINS.map((b) => b.name));
+  const TOKEN_RE = /(#[^\n]*)|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?|[“„”‘’][^“„”‘’"'\n]*[“”‘’"']?)|(\d+(?:\.\d+)?)|([\p{L}_][\p{L}\p{N}_]*)|(\n)|([^\S\n]+)|([\s\S])/gu;
+  const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function highlight(src) {
+    let html = '';
+    let prev1 = '';
+    let prev2 = '';
+    let m;
+    TOKEN_RE.lastIndex = 0;
+    while ((m = TOKEN_RE.exec(src))) {
+      const [text, comment, str, num, word, newline, space] = m;
+      if (comment !== undefined) html += `<span class="t-com">${escapeHtml(text)}</span>`;
+      else if (str !== undefined) html += `<span class="t-str">${escapeHtml(text)}</span>`;
+      else if (num !== undefined) html += `<span class="t-num">${text}</span>`;
+      else if (word !== undefined) {
+        let cls = null;
+        if (VALUES.has(word)) cls = 't-val';
+        else if (KW.has(word) || CTX.has(word) || (word === 'hver' && prev1 === 'for') || (word === 'i' && prev2 === 'hver')) cls = 't-kw';
+        else {
+          let j = TOKEN_RE.lastIndex;
+          while (src[j] === ' ' || src[j] === '\t') j++;
+          if (src[j] === '(') cls = BUILTIN.has(word) ? 't-bi' : 't-fn';
+        }
+        html += cls ? `<span class="${cls}">${escapeHtml(word)}</span>` : escapeHtml(word);
+        prev2 = prev1;
+        prev1 = word;
+        continue;
+      } else if (newline !== undefined) {
+        html += '\n';
+        prev1 = prev2 = '';
+        continue;
+      } else html += escapeHtml(text);
+      if (space === undefined) { prev2 = prev1; prev1 = text; }
+    }
+    return html;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Editoren
+  // ════════════════════════════════════════════════════════════
+
+  let errorLine = null;
+
+  function renderGutter() {
+    const count = codeEl.value.split('\n').length;
+    let html = '';
+    for (let i = 1; i <= count; i++) html += (i === errorLine ? `<span class="err">${i}</span>` : i) + '\n';
+    gutterEl.innerHTML = html;
+  }
+
+  function renderCode() {
+    const value = codeEl.value;
+    hlEl.innerHTML = highlight(value) + (value.endsWith('\n') ? ' ' : '');
+    renderGutter();
+    syncScroll();
+  }
+
+  function syncScroll() {
+    hlEl.scrollTop = codeEl.scrollTop;
+    hlEl.scrollLeft = codeEl.scrollLeft;
+    gutterEl.scrollTop = codeEl.scrollTop;
+    errBar.style.transform = `translateY(${-codeEl.scrollTop}px)`;
+  }
+
+  function markError(line) {
+    errorLine = line || null;
+    errBar.hidden = !errorLine;
+    if (errorLine) errBar.style.setProperty('--line', errorLine);
+    renderGutter();
+    syncScroll();
+  }
+
+  function updateCursor() {
+    const before = codeEl.value.slice(0, codeEl.selectionStart);
+    const line = before.split('\n').length;
+    const col = before.length - before.lastIndexOf('\n');
+    cursorEl.textContent = `Linje ${line}, tegn ${col}`;
+  }
+
+  function lineHeight() {
+    return parseFloat(getComputedStyle(codeEl).lineHeight) || 23;
+  }
+
+  function goToLine(line) {
+    const lines = codeEl.value.split('\n');
+    let start = 0;
+    for (let i = 0; i < line - 1 && i < lines.length; i++) start += lines[i].length + 1;
+    const end = start + (lines[line - 1] || '').length;
+    codeEl.focus({ preventScroll: true });
+    codeEl.setSelectionRange(start, end);
+    codeEl.scrollTop = Math.max(0, (line - 4) * lineHeight());
+    codeEl.closest('.pane').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    syncScroll();
+    updateCursor();
+  }
+
+  /** Indsætter tekst, så Fortryd (Ctrl+Z) stadig virker. */
+  function insertText(text) {
+    let done = false;
+    try { done = document.execCommand('insertText', false, text); } catch (e) { done = false; }
+    if (!done) {
+      codeEl.setRangeText(text, codeEl.selectionStart, codeEl.selectionEnd, 'end');
+      codeEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  function currentLineStart() {
+    return codeEl.value.lastIndexOf('\n', codeEl.selectionStart - 1) + 1;
+  }
+
+  let tabLeavesEditor = false;
+  codeEl.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      startRun(true);
+      return;
+    }
+    if (e.key === 'Escape') { tabLeavesEditor = true; return; }
+    if (e.key === 'Tab' && !tabLeavesEditor && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const start = currentLineStart();
+        const spaces = codeEl.value.slice(start, start + 4).match(/^ */)[0].length;
+        if (spaces) {
+          const caret = codeEl.selectionStart;
+          codeEl.setSelectionRange(start, start + spaces);
+          insertText('');
+          codeEl.setSelectionRange(Math.max(start, caret - spaces), Math.max(start, caret - spaces));
+        }
+      } else {
+        insertText('    ');
+      }
+      return;
+    }
+    tabLeavesEditor = false;
+
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) {
+      e.preventDefault();
+      const value = codeEl.value;
+      const caret = codeEl.selectionStart;
+      const lineText = value.slice(currentLineStart(), caret);
+      const indent = lineText.match(/^[ \t]*/)[0];
+      const restOfLine = value.slice(codeEl.selectionEnd, value.indexOf('\n', codeEl.selectionEnd) === -1 ? value.length : value.indexOf('\n', codeEl.selectionEnd));
+      if (lineText.trimEnd().endsWith('{')) {
+        if (restOfLine.trimStart().startsWith('}')) {
+          insertText('\n' + indent + '    \n' + indent);
+          const pos = caret + 1 + indent.length + 4;
+          codeEl.setSelectionRange(pos, pos);
+        } else {
+          insertText('\n' + indent + '    ');
+        }
+      } else {
+        insertText('\n' + indent);
+      }
+      return;
+    }
+
+    if (e.key === '}' && codeEl.selectionStart === codeEl.selectionEnd) {
+      const caret = codeEl.selectionStart;
+      const before = codeEl.value.slice(currentLineStart(), caret);
+      if (/^ {4,}$/.test(before)) {
+        e.preventDefault();
+        codeEl.setSelectionRange(caret - 4, caret);
+        insertText('}');
+      }
+    }
+  });
+
+  codeEl.addEventListener('input', () => {
+    renderCode();
+    if (errorLine) markError(null);
+    store.set(CODE_KEY, codeEl.value);
+    updateCursor();
+    scheduleInspect();
+    if (session && session.waiting) {
+      session.waiting = false;
+      const form = consoleEl.querySelector('.out-ask');
+      if (form) form.replaceWith(el('p', 'out-empty', 'Koden er ændret. Tryk på Kør for at starte forfra.'));
+      setStatus('', '');
+    }
+  });
+  codeEl.addEventListener('scroll', syncScroll);
+  ['keyup', 'click', 'focus'].forEach((type) => codeEl.addEventListener(type, updateCursor));
+
+  function setCode(value) {
+    codeEl.value = value;
+    codeEl.setSelectionRange(0, 0);
+    codeEl.scrollTop = 0;
+    codeEl.scrollLeft = 0;
+    store.set(CODE_KEY, value);
+    markError(null);
+    renderCode();
+    updateCursor();
+    scheduleInspect();
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Eksempler og dit eget program
+  // ════════════════════════════════════════════════════════════
+
+  let ownCode = store.get(OWN_KEY);
+  const isExample = (value) => EXAMPLES.some((x) => x.kode === value);
+
+  function fillPicker() {
+    picker.replaceChildren();
+    const placeholder = new Option('Åbn et eksempel …', '', true, true);
+    placeholder.disabled = true;
+    picker.append(placeholder);
+    if (ownCode && ownCode !== codeEl.value) picker.append(new Option('↩ Mit eget program', '__own'));
+    const group = document.createElement('optgroup');
+    group.label = 'Eksempler';
+    EXAMPLES.forEach((x) => group.append(new Option(x.titel, x.id)));
+    picker.append(group);
+    picker.selectedIndex = 0;
+  }
+
+  function rememberOwnCode() {
+    const current = codeEl.value;
+    if (current.trim() && !isExample(current)) {
+      ownCode = current;
+      store.set(OWN_KEY, ownCode);
+    }
+  }
+
+  picker.addEventListener('change', () => {
+    const choice = picker.value;
+    if (choice === '__own') {
+      const own = ownCode;
+      rememberOwnCode();
+      setCode(own);
+    } else {
+      const example = EXAMPLES.find((x) => x.id === choice);
+      if (!example) return;
+      rememberOwnCode();
+      setCode(example.kode);
+    }
+    fillPicker();
+    startRun(false);
+  });
+
+  // ════════════════════════════════════════════════════════════
+  //  Kørsel
+  // ════════════════════════════════════════════════════════════
+
+  let session = null;
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = 'status' + (kind ? ' is-' + kind : '');
+  }
+
+  function startRun(userStarted) {
+    session = {
+      source: codeEl.value,
+      answers: [],
+      seed: (Math.random() * 4294967296) >>> 0,
+      shownOps: 0,
+      userStarted,
+      waiting: false,
+    };
+    showTab('tab-result', false);
+    execute();
+  }
+
+  // spørg() kører programmet forfra med de svar, der er givet indtil nu.
+  // Tilfældige tal får det samme frø, så programmet opfører sig ens hver gang.
+  function execute() {
+    const started = performance.now();
+    const result = H.run(session.source, { answers: session.answers, seed: session.seed });
+    const ms = performance.now() - started;
+    session.waiting = Boolean(result.waitingFor);
+    showOutput(result);
+    showDrawing(result);
+    if (result.error) {
+      setStatus('Stoppede med en fejl', 'err');
+      markError(result.error.line);
+    } else if (result.waitingFor) {
+      setStatus('Venter på dit svar', 'wait');
+      markError(null);
+    } else {
+      const steps = result.steps.toLocaleString('da-DK');
+      setStatus(`Færdig · ${steps} skridt · ${ms < 1 ? 'under 1' : Math.round(ms)} ms`, 'ok');
+      markError(null);
+    }
+  }
+
+  function showOutput(result) {
+    const frag = document.createDocumentFragment();
+    for (const entry of result.output) {
+      if (entry.type === 'tekst') {
+        frag.append(el('div', 'out-line', entry.text));
+      } else {
+        const row = el('div', 'out-qa');
+        row.append(el('span', 'q', entry.question || 'Svar:'), el('span', 'a', entry.answer));
+        frag.append(row);
+      }
+    }
+    if (result.error) frag.append(errorBox(result.error));
+    else if (result.waitingFor) frag.append(answerForm(result.waitingFor.question));
+    else if (!result.output.length && !result.drawing.length) {
+      frag.append(el('p', 'out-empty', 'Programmet kørte uden at skrive noget. Brug skriv for at vise tekst her.'));
+    }
+    // Et program, der kun tegner, skal ikke have en tom tekstboks over papiret.
+    consoleEl.hidden = !frag.childNodes.length;
+    consoleEl.replaceChildren(frag);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    if (result.waitingFor && session.userStarted) {
+      const input = $('answer');
+      if (input) input.focus({ preventScroll: true });
+    }
+  }
+
+  function errorBox(error) {
+    const box = el('div', 'out-error');
+    box.append(el('strong', null, error.line ? `Fejl på linje ${error.line}` : 'Fejl'));
+    box.append(el('p', null, error.message));
+    if (error.line) {
+      const button = el('button', 'link-btn', 'Vis linjen i koden');
+      button.type = 'button';
+      button.addEventListener('click', () => goToLine(error.line));
+      box.append(button);
+    }
+    return box;
+  }
+
+  function answerForm(question) {
+    const form = el('form', 'out-ask');
+    const label = el('label', null, question || 'Skriv dit svar');
+    label.htmlFor = 'answer';
+    const row = el('div', 'ask-row');
+    const input = el('input');
+    input.id = 'answer';
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.setAttribute('enterkeyhint', 'send');
+    const button = el('button', 'run small', 'Svar');
+    button.type = 'submit';
+    row.append(input, button);
+    form.append(label, row);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      session.answers.push(input.value);
+      session.userStarted = true;
+      execute();
+    });
+    return form;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Skildpaddens tegning
+  // ════════════════════════════════════════════════════════════
+
+  let drawing = null;
+  let animation = 0;
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function sizeCanvas() {
+    const width = paperEl.getBoundingClientRect().width;
+    const px = Math.max(1, Math.round(width * (window.devicePixelRatio || 1)));
+    if (canvas.width !== px) {
+      canvas.width = px;
+      canvas.height = px;
+    }
+  }
+
+  function drawOp(ctx, op, fraction, ink) {
+    if (op.kind === 'background') {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = op.color;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      return null;
+    }
+    ctx.strokeStyle = op.color || ink;
+    ctx.lineWidth = op.width;
+    if (op.kind === 'line') {
+      const x2 = op.x1 + (op.x2 - op.x1) * fraction;
+      const y2 = op.y1 + (op.y2 - op.y1) * fraction;
+      ctx.beginPath();
+      ctx.moveTo(op.x1, op.y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      const moved = op.x2 !== op.x1 || op.y2 !== op.y1;
+      return { x: x2, y: y2, angle: moved ? (Math.atan2(op.x2 - op.x1, op.y2 - op.y1) * 180) / Math.PI : null };
+    }
+    if (op.kind === 'circle') {
+      ctx.beginPath();
+      ctx.arc(op.x, op.y, op.r, 0, Math.PI * 2 * fraction);
+      if (op.fill && fraction >= 1) {
+        ctx.fillStyle = op.color || ink;
+        ctx.fill();
+      }
+      ctx.stroke();
+      return { x: op.x, y: op.y, angle: op.angle };
+    }
+    return null;
+  }
+
+  function drawTurtle(ctx, t) {
+    const a = (t.angle * Math.PI) / 180;
+    const dx = Math.sin(a);
+    const dy = Math.cos(a);
+    const size = 11;
+    ctx.beginPath();
+    ctx.moveTo(t.x + dx * size, t.y + dy * size);
+    ctx.lineTo(t.x - dx * size * 0.6 + dy * size * 0.62, t.y - dy * size * 0.6 - dx * size * 0.62);
+    ctx.lineTo(t.x - dx * size * 0.3, t.y - dy * size * 0.3);
+    ctx.lineTo(t.x - dx * size * 0.6 - dy * size * 0.62, t.y - dy * size * 0.6 + dx * size * 0.62);
+    ctx.closePath();
+    ctx.fillStyle = cssVar('--accent');
+    ctx.strokeStyle = cssVar('--surface');
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function paint(count, fraction) {
+    if (!drawing) return;
+    const { ops, turtle } = drawing;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const scale = w / 400;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, canvas.height);
+    ctx.setTransform(scale, 0, 0, -scale, w / 2, canvas.height / 2); // y peger opad som i matematik
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const ink = cssVar('--ink');
+    let pos = { x: 0, y: 0, angle: 0 };
+    const keep = (next) => {
+      if (next) pos = { x: next.x, y: next.y, angle: next.angle === null ? pos.angle : next.angle };
+    };
+    for (let i = 0; i < count; i++) keep(drawOp(ctx, ops[i], 1, ink));
+    if (fraction > 0 && count < ops.length) keep(drawOp(ctx, ops[count], fraction, ink));
+    drawTurtle(ctx, count >= ops.length ? turtle : pos);
+  }
+
+  function showDrawing(result) {
+    cancelAnimationFrame(animation);
+    const ops = result.drawing;
+    if (!ops.length) {
+      paperWrap.hidden = true;
+      drawing = null;
+      return;
+    }
+    paperWrap.hidden = false;
+    sizeCanvas();
+    drawing = { ops, turtle: result.turtle };
+    const from = Math.min(session.shownOps, ops.length);
+    const count = ops.length - from;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || count === 0 || count > 3000) {
+      paint(ops.length, 0);
+      session.shownOps = ops.length;
+      return;
+    }
+    // Animer stregerne, så man kan se skildpadden tegne
+    const duration = Math.min(2600, 280 * count);
+    const begin = performance.now();
+    const frame = (now) => {
+      const progress = (Math.min(1, (now - begin) / duration)) * count;
+      const done = from + Math.floor(progress);
+      if (done >= ops.length) {
+        paint(ops.length, 0);
+        session.shownOps = ops.length;
+        return;
+      }
+      paint(done, progress - Math.floor(progress));
+      animation = requestAnimationFrame(frame);
+    };
+    animation = requestAnimationFrame(frame);
+  }
+
+  function repaint() {
+    if (!drawing || paperWrap.hidden) return;
+    sizeCanvas();
+    if (session && session.shownOps >= drawing.ops.length) paint(drawing.ops.length, 0);
+  }
+
+  if ('ResizeObserver' in window) new ResizeObserver(repaint).observe(paperEl);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => requestAnimationFrame(repaint));
+  new MutationObserver(() => requestAnimationFrame(repaint)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ════════════════════════════════════════════════════════════
+  //  Faner: Resultat, Tokens og Syntakstræ
+  // ════════════════════════════════════════════════════════════
+
+  const TABS = ['tab-result', 'tab-tokens', 'tab-tree'];
+  let activeTab = 'tab-result';
+
+  function showTab(id, focus) {
+    activeTab = id;
+    for (const tabId of TABS) {
+      const tab = $(tabId);
+      const selected = tabId === id;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !selected;
+    }
+    if (focus) $(id).focus();
+    if (id !== 'tab-result') renderInspect();
+    else repaint();
+  }
+
+  TABS.forEach((id, index) => {
+    const tab = $(id);
+    tab.addEventListener('click', () => showTab(id, false));
+    tab.addEventListener('keydown', (e) => {
+      let next = null;
+      if (e.key === 'ArrowRight') next = TABS[(index + 1) % TABS.length];
+      if (e.key === 'ArrowLeft') next = TABS[(index + TABS.length - 1) % TABS.length];
+      if (e.key === 'Home') next = TABS[0];
+      if (e.key === 'End') next = TABS[TABS.length - 1];
+      if (next) { e.preventDefault(); showTab(next, true); }
+    });
+  });
+
+  document.querySelectorAll('[data-open-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      showTab(button.dataset.openTab, true);
+      $(button.dataset.openTab).closest('.pane').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  });
+
+  let inspectTimer = 0;
+  function scheduleInspect() {
+    if (activeTab === 'tab-result') return;
+    clearTimeout(inspectTimer);
+    inspectTimer = setTimeout(renderInspect, 250);
+  }
+
+  function renderInspect() {
+    if (activeTab === 'tab-tokens') renderTokens();
+    if (activeTab === 'tab-tree') renderTree();
+  }
+
+  const TOKEN_TYPES = { kw: 'nøgleord', ident: 'navn', num: 'tal', str: 'tekst', op: 'tegn', nl: 'linjeskift' };
+
+  function renderTokens() {
+    const box = $('tokens');
+    let tokens;
+    try {
+      tokens = H.tokenize(codeEl.value);
+    } catch (e) {
+      box.replaceChildren(errorBox({ message: e.message, line: e.line }));
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    let row = null;
+    let chips = null;
+    let currentLine = 0;
+    let shown = 0;
+    for (const t of tokens) {
+      if (t.type === 'eof' || (t.type === 'nl' && t.length === 0)) continue;
+      if (shown++ > 1500) {
+        frag.append(el('p', 'explain', 'Der er flere tokens, men de bliver ikke vist her.'));
+        break;
+      }
+      if (t.line !== currentLine) {
+        currentLine = t.line;
+        row = el('div', 'tok-line');
+        chips = el('div', 'tok-chips');
+        row.append(el('span', 'tok-ln', String(t.line)), chips);
+        frag.append(row);
+      }
+      const chip = el('span', 'tok tok-' + t.type);
+      let shownValue = t.type === 'str' ? JSON.stringify(t.value) : String(t.value);
+      if (t.type === 'nl') shownValue = t.value === ';' ? ';' : '↵';
+      chip.append(el('span', 'tok-v', shownValue), el('span', 'tok-t', TOKEN_TYPES[t.type]));
+      chips.append(chip);
+    }
+    if (!frag.childNodes.length) frag.append(el('p', 'explain', 'Der er ingen kode endnu.'));
+    box.replaceChildren(frag);
+  }
+
+  function describeNode(node) {
+    const one = (role, n) => (n ? [{ role, node: n }] : []);
+    const many = (role, list) => list.map((n) => ({ role, node: n }));
+    const block = (role, body) => [{ role, node: { type: 'Block', body } }];
+    switch (node.type) {
+      case 'Program': return { label: 'program', cls: 'stmt', kids: many(null, node.body) };
+      case 'Block': return { label: node.body.length ? 'blok' : 'tom blok', cls: 'stmt', kids: many(null, node.body) };
+      case 'Set': return { label: `sæt ${node.op}`, cls: 'stmt', kids: [...one('variabel', node.target), ...one('værdi', node.value)] };
+      case 'Print': return { label: 'skriv', cls: 'stmt', kids: many(null, node.args) };
+      case 'ExprStmt': return describeNode(node.expr);
+      case 'If': {
+        const kids = [];
+        node.branches.forEach((b, i) => {
+          kids.push({ role: i ? 'ellers hvis' : 'betingelse', node: b.cond });
+          kids.push(...block('så', b.body));
+        });
+        if (node.otherwise) kids.push(...block('ellers', node.otherwise));
+        return { label: 'hvis', cls: 'stmt', kids };
+      }
+      case 'Repeat': return { label: 'gentag', cls: 'stmt', kids: [...one('antal gange', node.count), ...block('krop', node.body)] };
+      case 'While': return { label: 'mens', cls: 'stmt', kids: [...one('betingelse', node.cond), ...block('krop', node.body)] };
+      case 'ForRange': return { label: `for ${node.name}`, cls: 'stmt', kids: [...one('fra', node.from), ...one('til', node.to), ...one('trin', node.step), ...block('krop', node.body)] };
+      case 'ForEach': return { label: `for hver ${node.name}`, cls: 'stmt', kids: [...one('i', node.iterable), ...block('krop', node.body)] };
+      case 'FuncDecl': return { label: `funktion ${node.name}(${node.params.join(', ')})`, cls: 'stmt', kids: block('krop', node.body) };
+      case 'FuncLit': return { label: `funktion(${node.params.join(', ')})`, cls: 'stmt', kids: block('krop', node.body) };
+      case 'Return': return { label: 'returner', cls: 'stmt', kids: one('værdi', node.value) };
+      case 'Break': return { label: 'stop', cls: 'stmt', kids: [] };
+      case 'Continue': return { label: 'fortsæt', cls: 'stmt', kids: [] };
+      case 'Lit': return { label: H.format(node.value, true), cls: 'lit', tag: H.typeName(node.value), kids: [] };
+      case 'Var': return { label: node.name, cls: 'name', tag: 'navn', kids: [] };
+      case 'List': return { label: '[ ]', cls: 'op', tag: 'liste', kids: many(null, node.items) };
+      case 'Index': return { label: '[ ]', cls: 'op', tag: 'plads', kids: [...one('i', node.object), ...one('plads', node.index)] };
+      case 'Call':
+        if (node.callee.type === 'Var') return { label: `${node.callee.name}( )`, cls: 'call', tag: 'kald', kids: many(null, node.args) };
+        return { label: '( )', cls: 'call', tag: 'kald', kids: [...one('funktion', node.callee), ...many(null, node.args)] };
+      case 'Neg': return { label: '−', cls: 'op', tag: 'minus', kids: one(null, node.arg) };
+      case 'Not': return { label: 'ikke', cls: 'op', kids: one(null, node.arg) };
+      case 'Logical': return { label: node.op, cls: 'op', kids: [...one(null, node.left), ...one(null, node.right)] };
+      case 'Binary': return { label: node.raw, cls: 'op', kids: [...one(null, node.left), ...one(null, node.right)] };
+      default: return { label: node.type, cls: '', kids: [] };
+    }
+  }
+
+  function treeItem(node, role) {
+    const d = describeNode(node);
+    const li = document.createElement('li');
+    const row = el('span', 'node ' + d.cls);
+    if (role) row.append(el('span', 'role', role));
+    row.append(el('span', 'lbl', d.label));
+    if (d.tag) row.append(el('span', 'tag', d.tag));
+    li.append(row);
+    if (d.kids.length) {
+      const ul = document.createElement('ul');
+      d.kids.forEach((kid) => ul.append(treeItem(kid.node, kid.role)));
+      li.append(ul);
+    }
+    return li;
+  }
+
+  function renderTree() {
+    const box = $('tree');
+    let ast;
+    try {
+      ast = H.parse(codeEl.value);
+    } catch (e) {
+      box.replaceChildren(errorBox({ message: e.message, line: e.line }));
+      return;
+    }
+    const ul = document.createElement('ul');
+    ul.append(treeItem(ast, null));
+    box.replaceChildren(ul);
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Håndbogen
+  // ════════════════════════════════════════════════════════════
+
+  function renderHandbook() {
+    document.querySelectorAll('pre.sample code').forEach((code) => {
+      code.innerHTML = highlight(code.textContent);
+    });
+
+    const groups = new Map();
+    for (const fn of H.BUILTINS) {
+      if (!groups.has(fn.group)) groups.set(fn.group, []);
+      groups.get(fn.group).push(fn);
+    }
+    const frag = document.createDocumentFragment();
+    for (const [group, fns] of groups) {
+      const box = el('div', 'fn-group');
+      box.append(el('h3', null, group));
+      const table = el('table', 'fn-table');
+      const body = document.createElement('tbody');
+      for (const fn of fns) {
+        const tr = document.createElement('tr');
+        tr.append(el('td', null, `${fn.name}(${fn.params})`), el('td', null, fn.description));
+        body.append(tr);
+      }
+      table.append(body);
+      box.append(table);
+      if (group === 'Tegning') {
+        const list = el('ul', 'swatches');
+        list.setAttribute('aria-label', 'Farver');
+        for (const [name, color] of Object.entries(H.COLORS)) {
+          const item = document.createElement('li');
+          const dot = document.createElement('i');
+          dot.style.background = color;
+          item.append(dot, document.createTextNode(name));
+          list.append(item);
+        }
+        box.append(list);
+      }
+      frag.append(box);
+    }
+    $('fn-groups').replaceChildren(frag);
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  Start
+  // ════════════════════════════════════════════════════════════
+
+  $('run').addEventListener('click', () => startRun(true));
+
+  const saved = store.get(CODE_KEY);
+  setCode(saved && saved.trim() ? saved : (EXAMPLES[0] ? EXAMPLES[0].kode : 'skriv "Hej verden!"\n'));
+  fillPicker();
+  renderHandbook();
+  startRun(false);
+})();
+</script>
+</body>
+</html>

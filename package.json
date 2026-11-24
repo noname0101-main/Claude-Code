@@ -1,0 +1,17 @@
+{
+  "name": "hygge-sprog",
+  "version": "1.0.0",
+  "description": "Hygge – et lille programmeringssprog på dansk",
+  "private": true,
+  "main": "hygge.js",
+  "bin": {
+    "hygge": "cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
