@@ -1,0 +1,51 @@
+# Lægger Hygge-editoren på GitHub Pages.
+#
+# Ved hver push køres testene, og siden bygges. Den udgives kun fra
+# repoets standard-gren. Opslag kræver en server og kommer ikke med.
+name: Hjemmeside
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  byg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Kør testene
+        run: npm test
+
+      - name: Saml filerne til siden
+        run: |
+          mkdir _site
+          cp index.html hygge.js eksempler.js _site/
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  udgiv:
+    if: github.ref_name == github.event.repository.default_branch
+    needs: byg
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.udgivelse.outputs.page_url }}
+    steps:
+      - id: udgivelse
+        uses: actions/deploy-pages@v4
