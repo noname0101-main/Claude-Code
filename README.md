@@ -22,6 +22,8 @@ gentag 5 gange {
 
 ## Prøv det
 
+**På nettet:** <https://noname0101-main.github.io/Claude-Code/>
+
 **I browseren:** Åbn `index.html`. Skriv kode til venstre, og tryk på **Kør** (eller `Ctrl` + `Enter`). Under **Eksempler** ligger ti færdige programmer, du kan lege med.
 
 **I terminalen** (kræver Node.js 18 eller nyere):
@@ -74,6 +76,7 @@ Du kan se de to første trin for dit eget program under fanerne **Tokens** og **
 | `eksempler.js` | De ti eksempelprogrammer |
 | `cli.js` | Kører Hygge-programmer i terminalen |
 | `test/hygge.test.js` | Tests af sproget og alle eksemplerne |
+| `.github/workflows/hjemmeside.yml` | Kører testene og lægger editoren på GitHub Pages |
 
 Hygge stopper selv programmer, der kører i ring (over 5 millioner skridt), og funktioner, der kalder sig selv for mange gange. Så hænger browseren ikke.
 
